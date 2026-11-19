@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 
+import { measure, tokenize, type Size } from "../../hub/cashAssembly";
 import type { NamedItem, PartView, TemplateView, ValueView } from "../../hub/templateView";
+import { ScriptCode, type ScriptNames } from "./ScriptCode";
 
 const card = "rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#121522] to-[#0a0c13] p-6 sm:p-7 2xl:p-9";
 const heading = "text-xs font-semibold uppercase tracking-[.16em] text-slate-500";
@@ -66,6 +68,49 @@ function Values({ items }: { items: ValueView[] }) {
           }
         />
       ))}
+    </ul>
+  );
+}
+
+function sizeLabel({ bytes, unknown }: Size): { label: string; title: string } {
+  const unit = bytes === 1 ? "byte" : "bytes";
+  const names = [...new Set(unknown)];
+
+  if (names.length === 0) {
+    return { label: `${bytes.toLocaleString()} ${unit}`, title: "Compiled size of this script" };
+  }
+
+  return {
+    label: `${bytes.toLocaleString()} ${unit} + ${names.length} ${names.length === 1 ? "value" : "values"}`,
+    title: `${bytes.toLocaleString()} ${unit} of fixed code, plus the size of: ${names.join(", ")} (filled in when the transaction is built)`,
+  };
+}
+
+function ScriptList({ view }: { view: TemplateView }) {
+  const sources = Object.fromEntries(view.scripts.map((script) => [script.id, script.text]));
+  const names: ScriptNames = {
+    scripts: new Set(view.scripts.map((script) => script.id)),
+    variables: new Map(view.variables.map((variable) => [variable.id, variable.name])),
+  };
+
+  return (
+    <ul className="space-y-5">
+      {view.scripts.map((script) => {
+        const tokens = tokenize(script.text);
+        const size = sizeLabel(measure(tokens, sources, new Set([script.id])));
+
+        return (
+          <li key={script.id} id={`script-${script.id}`} className="scroll-mt-24">
+            <p className="flex items-center justify-between gap-3 text-sm font-semibold text-white">
+              <span className={code}>{script.id}</span>
+              <span className="cursor-help text-xs font-normal text-slate-500" title={size.title}>
+                {size.label}
+              </span>
+            </p>
+            <ScriptCode tokens={tokens} names={names} />
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -177,19 +222,7 @@ export function TemplateContents({ view }: { view: TemplateView }) {
         </Block>
 
         <Block title="Scripts (CashAssembly)" count={view.scripts.length}>
-          <ul className="space-y-5">
-            {view.scripts.map((script) => (
-              <li key={script.id}>
-                <p className="flex items-center justify-between gap-3 text-sm font-semibold text-white">
-                  <span className={code}>{script.id}</span>
-                  <span className="text-xs font-normal text-slate-500">{script.length.toLocaleString()} characters</span>
-                </p>
-                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-xl border border-white/[0.06] bg-[#080a10] p-3 font-mono text-xs leading-5 text-slate-300">
-                  {script.text}
-                </pre>
-              </li>
-            ))}
-          </ul>
+          <ScriptList view={view} />
         </Block>
 
         <Block title="Constants" count={view.constants.length}>
