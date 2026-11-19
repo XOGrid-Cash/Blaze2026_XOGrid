@@ -33,8 +33,11 @@ export interface TransactionView extends NamedItem {
 export interface PartFact {
   label: string;
   code: string;
-  /** What the code names: an expression, or the id of a script or locking script. */
-  refers: "expression" | "script" | "lockingScript";
+  /**
+   * What the code names: a CashAssembly expression, the id of a script or locking script, or a space-separated list
+   * of action or variable ids.
+   */
+  refers: "expression" | "script" | "lockingScript" | "actions" | "variables";
   /** Plain text instead of code, for values like the locking type. */
   plain?: boolean;
 }
@@ -216,6 +219,46 @@ function amountFact(item: Dict): PartFact | null {
   return satoshis ? { label: "Amount (sats)", code: satoshis.slice(0, MAX_TEXT), refers: "expression" } : null;
 }
 
+function expressionFact(label: string, value: unknown): PartFact | null {
+  const code = plainValue(value);
+
+  return code ? { label, code: code.slice(0, MAX_TEXT), refers: "expression" } : null;
+}
+
+/** The CashTokens an input or output carries. */
+function tokenFacts(item: Dict): (PartFact | null)[] {
+  const token = isDict(item.token) ? item.token : null;
+  const nft = token && isDict(token.nft) ? token.nft : null;
+
+  return [
+    expressionFact("Token category", token?.category),
+    expressionFact("Token amount", token?.amount),
+    nft ? { label: "NFT capability", code: text(nft.capability, 40), refers: "expression", plain: true } : null,
+    expressionFact("NFT commitment", nft?.commitment),
+  ];
+}
+
+function stringsOf(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string").map((entry) => text(entry, MAX_NAME)) : [];
+}
+
+/** The actions a locking script offers each role, and the values it keeps between transactions. */
+function lockingRoleFacts(item: Dict): PartFact[] {
+  const roles = entries(item.roles).map(([, role]) => role);
+  const actions = new Set(roles.flatMap((role) => (Array.isArray(role.actions) ? role.actions.filter(isDict).map((entry) => text(entry.action, MAX_NAME)) : [])));
+  const state = new Set([
+    ...stringsOf(isDict(item.state) ? item.state.variables : null),
+    ...roles.flatMap((role) => stringsOf(isDict(role.state) ? role.state.variables : null)),
+  ]);
+  actions.delete("");
+  state.delete("");
+
+  return [
+    { label: "Actions", code: [...actions].join(" "), refers: "actions" },
+    { label: "Stored values", code: [...state].join(" "), refers: "variables" },
+  ];
+}
+
 function valuesOf(value: unknown, variablesById: Dict): ValueView[] {
   return entries(value).map(([id, item]) => ({
     ...named(id, item, variablesById),
@@ -245,14 +288,19 @@ export function viewTemplate(template: unknown): TemplateView {
     inputs: partsOf(source.inputs, variablesById, (item) => [
       amountFact(item),
       { label: "Unlocked by", code: text(item.unlockingScript, MAX_NAME), refers: "script" },
+      expressionFact("Sequence number", item.sequenceNumber),
+      ...tokenFacts(item),
     ]),
     outputs: partsOf(source.outputs, variablesById, (item) => [
       amountFact(item),
       { label: "Locked by", code: text(item.lockingScript, MAX_NAME), refers: "lockingScript" },
+      ...tokenFacts(item),
     ]),
     lockingScripts: partsOf(source.lockingScripts, variablesById, (item) => [
       { label: "Type", code: text(item.lockingType, 40), refers: "expression", plain: true },
       { label: "Script", code: text(item.lockingBytecode, MAX_NAME), refers: "script" },
+      { label: "Unlocked by", code: text(item.unlockingBytecode, MAX_NAME), refers: "script" },
+      ...lockingRoleFacts(item),
     ]),
     scripts,
     constants: valuesOf(source.constants, variablesById),

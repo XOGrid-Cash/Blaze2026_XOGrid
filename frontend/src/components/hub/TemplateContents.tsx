@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { tokenize } from "../../hub/cashAssembly";
@@ -6,6 +6,7 @@ import type { NamedItem, PartFact, PartView, TemplateView, ValueView } from "../
 import { InlineCode, ScriptCode } from "./ScriptCode";
 import { anchorId, buildRefIndex, RefContext, sizeLabel, useRefNavigation, useRefs, type RefKind } from "../../hub/templateRefs";
 import { BackChip, RefLink } from "./RefLink";
+import { TemplateSearch } from "./TemplateSearch";
 
 const card = "rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#121522] to-[#0a0c13] p-6 sm:p-7 2xl:p-9";
 const heading = "text-xs font-semibold uppercase tracking-[.16em] text-slate-500";
@@ -32,6 +33,34 @@ function Block({ title, count, open, children }: { title: string; count: number;
   );
 }
 
+/** "Used in: …" with a link to each part that refers to this one, or a "Not used" note where that is worth knowing. */
+function UsedIn({ kind, id }: { kind: RefKind; id: string }) {
+  const refs = useRefs();
+  const usages = refs?.usages(kind, id) ?? [];
+
+  if (usages.length === 0) {
+    return refs?.reportUnused(kind) ? (
+      <p className="text-xs text-amber-300/80" title="Nothing else in this template refers to it">
+        Not used anywhere in this template
+      </p>
+    ) : null;
+  }
+
+  return (
+    <p className="text-xs leading-5 text-slate-500">
+      Used in{" "}
+      {usages.map((usage, index) => (
+        <Fragment key={`${usage.kind}:${usage.id}`}>
+          {index > 0 && ", "}
+          <RefLink target={usage} className="text-slate-300">
+            {usage.name}
+          </RefLink>
+        </Fragment>
+      ))}
+    </p>
+  );
+}
+
 function Named({ kind, item, extra }: { kind: RefKind; item: NamedItem; extra?: ReactNode }) {
   return (
     <li id={anchorId(kind, item.id)} data-ref-label={item.name} className={`space-y-1 ${target}`}>
@@ -40,6 +69,7 @@ function Named({ kind, item, extra }: { kind: RefKind; item: NamedItem; extra?: 
       </p>
       {item.description && <p className="text-sm leading-6 text-slate-400">{item.description}</p>}
       {extra}
+      <UsedIn kind={kind} id={item.id} />
     </li>
   );
 }
@@ -53,6 +83,18 @@ function Fact({ fact }: { fact: PartFact }) {
     value = <span className="font-mono text-xs text-slate-300">{fact.code}</span>;
   } else if (fact.refers === "expression") {
     value = <InlineCode text={fact.code} />;
+  } else if (fact.refers === "actions" || fact.refers === "variables") {
+    value = fact.code.split(/\s+/).map((id, index) => {
+      const linked = fact.refers === "actions" ? refs?.get("action", id) : (refs?.get("variable", id) ?? refs?.get("constant", id));
+      return (
+        <Fragment key={id}>
+          {index > 0 && ", "}
+          <RefLink target={linked} className={`font-mono text-xs ${fact.refers === "actions" ? "text-slate-200" : "text-fuchsia-300"}`}>
+            {linked?.kind === "action" ? linked.name : id}
+          </RefLink>
+        </Fragment>
+      );
+    });
   } else {
     value = (
       <RefLink target={refs?.get(fact.refers, fact.code)} className="font-mono text-xs text-violet-300">
@@ -125,6 +167,9 @@ function ScriptList({ view }: { view: TemplateView }) {
               )}
             </p>
             <ScriptCode tokens={tokenize(script.text)} />
+            <div className="mt-1.5">
+              <UsedIn kind="script" id={script.id} />
+            </div>
           </li>
         );
       })}
@@ -173,7 +218,9 @@ export function TemplateContents({ view }: { view: TemplateView }) {
           before you use a template with real money. Underlined names link to where they are defined.
         </p>
 
-        <div className="mt-5 space-y-3">
+        <TemplateSearch />
+
+        <div className="mt-4 space-y-3">
           <Block title="Actions" count={view.actions.length}>
             <ul className="space-y-5">
               {view.actions.map((action) => (

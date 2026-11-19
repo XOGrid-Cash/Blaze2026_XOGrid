@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
-import { measure, tokenize, type Size } from "./cashAssembly";
-import type { TemplateView } from "./templateView";
+import { measure, tokenize, type Size, type Token } from "./cashAssembly";
+import type { PartFact, TemplateView } from "./templateView";
 
 // Links between the parts of a template. A link shows a short preview on hover (or on the first tap on a touch
 // screen) and, when followed, opens the section that holds the definition, scrolls to it and highlights it. Each jump
@@ -54,11 +54,32 @@ export function sizeLabel({ bytes, unknown }: Size): { label: string; title: str
   };
 }
 
+/** Kinds in the order the sections appear, which is also the order search results are grouped in. */
+export const KIND_ORDER: RefKind[] = ["action", "transaction", "lockingScript", "script", "constant", "variable"];
+
+/** Kinds whose "Not used" note is worth showing: an unused script or value is often a mistake. Actions are entry points. */
+const REPORT_UNUSED = new Set<RefKind>(["script", "constant", "variable"]);
+
 export interface RefIndex {
   get(kind: RefKind, id: string): RefTarget | undefined;
   /** What a name inside CashAssembly points to: a script first, then a constant, then a variable. */
   resolveCode(word: string): RefTarget | undefined;
   scriptSize(id: string): Size | undefined;
+  /** Every part of the template, in section order. */
+  all(): RefTarget[];
+  /** The parts that refer to this one, in section order. */
+  usages(kind: RefKind, id: string): RefTarget[];
+  /** Whether a "Not used" note should be shown for this part. */
+  reportUnused(kind: RefKind): boolean;
+}
+
+/** Every name a piece of CashAssembly mentions, including inside pushes and $(…) calculations. */
+function namesIn(tokens: Token[], into: string[] = []): string[] {
+  for (const token of tokens) {
+    if (token.kind === "ref") into.push(token.text);
+    if (token.kind === "push" || token.kind === "eval") namesIn(token.children, into);
+  }
+  return into;
 }
 
 export function buildRefIndex(view: TemplateView): RefIndex {
@@ -73,7 +94,13 @@ export function buildRefIndex(view: TemplateView): RefIndex {
     add({ kind: "transaction", id: item.id, name: item.name, description: item.description, meta: `Spends ${item.inputs.length}, creates ${item.outputs.length}` }),
   );
   view.lockingScripts.forEach((item) =>
-    add({ kind: "lockingScript", id: item.id, name: item.name, description: item.description, meta: item.facts.map((fact) => fact.code).join(" · ") || null }),
+    add({
+      kind: "lockingScript",
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      meta: item.facts.slice(0, 2).map((fact) => fact.code).join(" · ") || null,
+    }),
   );
   view.constants.forEach((item) =>
     add({ kind: "constant", id: item.id, name: item.name, description: item.description, meta: [item.type, item.value].filter(Boolean).join(" = ") || null }),
@@ -88,15 +115,94 @@ export function buildRefIndex(view: TemplateView): RefIndex {
   });
 
   const get = (kind: RefKind, id: string) => targets.get(key(kind, id));
+  const resolveCode = (word: string) => {
+    const base = word.split(".")[0];
+    return get("script", word) ?? get("constant", base) ?? get("variable", base);
+  };
+
+  // Where each part is used: target key -> the keys of the parts that mention it.
+  const usedBy = new Map<string, Set<string>>();
+  const use = (target: RefTarget | undefined, from: RefKind, fromId: string) => {
+    if (!target || (target.kind === from && target.id === fromId)) return;
+    const targetKey = key(target.kind, target.id);
+    if (!usedBy.has(targetKey)) usedBy.set(targetKey, new Set());
+    usedBy.get(targetKey)?.add(key(from, fromId));
+  };
+  const useFacts = (facts: PartFact[], from: RefKind, fromId: string) => {
+    for (const fact of facts) {
+      if (fact.plain) continue;
+      const ids = fact.code.split(/\s+/).filter(Boolean);
+
+      if (fact.refers === "expression") namesIn(tokenize(fact.code)).forEach((name) => use(resolveCode(name), from, fromId));
+      if (fact.refers === "script" || fact.refers === "lockingScript") use(get(fact.refers, fact.code), from, fromId);
+      if (fact.refers === "actions") ids.forEach((id) => use(get("action", id), from, fromId));
+      if (fact.refers === "variables") ids.forEach((id) => use(get("variable", id) ?? get("constant", id), from, fromId));
+    }
+  };
+  const inputs = new Map(view.inputs.map((item) => [item.id, item]));
+  const outputs = new Map(view.outputs.map((item) => [item.id, item]));
+
+  view.actions.forEach((action) => {
+    if (action.transaction) use(get("transaction", action.transaction), "action", action.id);
+    action.roles.forEach((role) => role.variables.forEach((id) => use(get("variable", id) ?? get("constant", id), "action", action.id)));
+  });
+  view.transactions.forEach((transaction) => {
+    transaction.inputs.forEach((id) => useFacts(inputs.get(id)?.facts ?? [], "transaction", transaction.id));
+    transaction.outputs.forEach((id) => useFacts(outputs.get(id)?.facts ?? [], "transaction", transaction.id));
+  });
+  view.lockingScripts.forEach((item) => useFacts(item.facts, "lockingScript", item.id));
+  view.scripts.forEach((script) => namesIn(tokenize(script.text)).forEach((name) => use(resolveCode(name), "script", script.id)));
+
+  const rank = (target: RefTarget) => KIND_ORDER.indexOf(target.kind);
+  const all = [...targets.values()].sort((a, b) => rank(a) - rank(b));
 
   return {
     get,
-    resolveCode: (word) => {
-      const base = word.split(".")[0];
-      return get("script", word) ?? get("constant", base) ?? get("variable", base);
-    },
+    resolveCode,
     scriptSize: (id) => sizes.get(id),
+    all: () => all,
+    usages: (kind, id) =>
+      [...(usedBy.get(key(kind, id)) ?? [])]
+        .map((usage) => targets.get(usage))
+        .filter((target): target is RefTarget => target !== undefined)
+        .sort((a, b) => rank(a) - rank(b)),
+    reportUnused: (kind) => REPORT_UNUSED.has(kind),
   };
+}
+
+export interface SearchResult {
+  target: RefTarget;
+  /** Where the query was found, for bolding it. */
+  field: "id" | "name" | "description";
+  score: number;
+}
+
+/** Ranks the parts of a template against a query: exact id, then id or name prefix, then id or name, then description. */
+export function searchRefs(index: RefIndex, query: string): SearchResult[] {
+  const needle = query.trim().toLowerCase();
+
+  if (!needle) {
+    return [];
+  }
+
+  const results: SearchResult[] = [];
+
+  for (const target of index.all()) {
+    const id = target.id.toLowerCase();
+    const name = target.name.toLowerCase();
+    let result: SearchResult | null = null;
+
+    if (id === needle || name === needle) result = { target, field: id === needle ? "id" : "name", score: 0 };
+    else if (id.startsWith(needle)) result = { target, field: "id", score: 1 };
+    else if (name.startsWith(needle)) result = { target, field: "name", score: 1 };
+    else if (id.includes(needle)) result = { target, field: "id", score: 2 };
+    else if (name.includes(needle)) result = { target, field: "name", score: 2 };
+    else if (target.description.toLowerCase().includes(needle)) result = { target, field: "description", score: 3 };
+
+    if (result) results.push(result);
+  }
+
+  return results.sort((a, b) => a.score - b.score);
 }
 
 export const RefContext = createContext<RefIndex | null>(null);
