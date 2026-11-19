@@ -20,7 +20,7 @@ export function BackChip({ label, onDismiss }: { label: string | null; onDismiss
           onDismiss();
           window.history.back();
         }}
-        className="flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-[#161a28]/95 px-4 py-2 text-sm text-slate-200 shadow-xl shadow-black/40 backdrop-blur hover:border-orange-400/50 hover:text-white"
+        className="flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-[#161a28]/95 px-4 py-2 text-sm! text-slate-200 shadow-xl shadow-black/40 backdrop-blur hover:border-orange-400/50 hover:text-white"
       >
         <ArrowLeft size={14} className="shrink-0" />
         <span className="truncate">

@@ -37,6 +37,14 @@ body {
   min-height: 100vh;
 }
 
+/*
+ * TECH DEBT: this rule is outside any CSS layer, so it beats Tailwind's utilities (which live in a layer). Any font
+ * class on these elements, such as text-xs or font-mono, is silently ignored and the element takes its parent's font.
+ * To work around it, some buttons use Tailwind's important form (text-xs!), for example in
+ * components/hub/ShortcutsHelp.tsx, TemplateSearch.tsx and RefLink.tsx.
+ * Fix: move this rule into @layer base, check the pages whose buttons and fields change size, then remove the
+ * trailing "!" from those classes (search for "text-xs!", "text-sm!" and "text-[11px]!").
+ */
 button,
 input,
 textarea,

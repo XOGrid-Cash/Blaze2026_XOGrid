@@ -149,7 +149,7 @@ export function TemplateSearch() {
             onClick={() => setExpanded(isExpanded ? null : key)}
             disabled={usages.length === 0}
             aria-expanded={isExpanded}
-            className="flex shrink-0 items-center gap-1 px-3 text-[11px] text-slate-400 enabled:hover:text-white disabled:cursor-default disabled:text-slate-600"
+            className="flex shrink-0 items-center gap-1 px-3 text-[11px]! text-slate-400 enabled:hover:text-white disabled:cursor-default disabled:text-slate-600"
             title={usages.length === 0 ? "Nothing in this template refers to it" : "Show where it is used"}
           >
             {usages.length === 0 ? (refs.reportUnused(target.kind) ? "not used" : "") : `used in ${usages.length}`}
@@ -163,7 +163,7 @@ export function TemplateSearch() {
                 <button
                   type="button"
                   onClick={() => go(usage)}
-                  className="flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left text-xs text-slate-300 hover:bg-white/[0.05] hover:text-white"
+                  className="flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left text-xs! text-slate-300 hover:bg-white/[0.05] hover:text-white"
                 >
                   <span className="shrink-0 text-[10px] uppercase tracking-wider text-slate-500">{KIND_LABEL[usage.kind]}</span>
                   <span className="truncate">{usage.name}</span>

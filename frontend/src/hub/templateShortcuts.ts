@@ -36,7 +36,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: ["c"], label: "Collapse all sections", optional: true },
   { keys: ["1", "–", "6"], label: "Go to a section", optional: true },
   { keys: ["b"], label: "Back to where you were before the last jump", optional: true },
-  { keys: ["Esc"], label: "Close this help, or clear the search", optional: false },
+  { keys: ["Esc"], label: "Clear the search", optional: false },
 ];
 
 /** Sent to the search box to focus it. */
@@ -81,9 +81,8 @@ export const CONTENTS_ROOT = "[data-template-contents]";
  * Listens for the shortcuts while a template's contents are on screen. `sections` are the kinds this template has,
  * so a number key for a missing section does nothing.
  */
-export function useTemplateShortcuts({ sections, helpOpen, setHelpOpen }: {
+export function useTemplateShortcuts({ sections, setHelpOpen }: {
   sections: RefKind[];
-  helpOpen: boolean;
   setHelpOpen: (open: boolean | ((open: boolean) => boolean)) => void;
 }): { enabled: boolean; setEnabled: (enabled: boolean) => void } {
   const [enabled, setEnabledState] = useState(readEnabled);
@@ -91,11 +90,6 @@ export function useTemplateShortcuts({ sections, helpOpen, setHelpOpen }: {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
-
-      if (event.key === "Escape" && helpOpen) {
-        setHelpOpen(false);
-        return;
-      }
 
       if (isTyping(document.activeElement)) return;
 
@@ -105,7 +99,6 @@ export function useTemplateShortcuts({ sections, helpOpen, setHelpOpen }: {
           return true;
         }
         if (event.key === "/") {
-          setHelpOpen(false);
           window.dispatchEvent(new Event(FOCUS_SEARCH_EVENT));
           return true;
         }
@@ -134,7 +127,7 @@ export function useTemplateShortcuts({ sections, helpOpen, setHelpOpen }: {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enabled, helpOpen, sections, setHelpOpen]);
+  }, [enabled, sections, setHelpOpen]);
 
   return {
     enabled,
