@@ -75,13 +75,13 @@ function TemplateDetail() {
 
   return (
     <main className="min-h-screen bg-[#05070b] text-white">
-      <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8 2xl:max-w-[1500px] 2xl:px-10 2xl:py-10">
+      <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8 2xl:max-w-375 2xl:px-10 2xl:py-10">
         <header className="mb-10 flex items-center justify-between 2xl:mb-14">
           <Link to="/" className="flex items-center gap-3">
-            <img src={xogridlogo} alt="XOGrid" className="h-9 w-auto" />
+            <img src={xogridlogo} alt="XOGrid" className="" style={{ width: '12rem' }} />
           </Link>
-          <Link to="/explore" className="flex items-center gap-2 text-sm text-slate-400 transition hover:text-white">
-            <ArrowLeft size={16} />
+          <Link to="/explore" className="flex items-center gap-2 text-slate-400 transition hover:text-white text-lg">
+            <ArrowLeft strokeWidth={1} size={28} />
             All templates
           </Link>
         </header>
