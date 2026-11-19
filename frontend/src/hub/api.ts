@@ -268,3 +268,29 @@ export const publishTemplate = (
       ...(publisher ? { publisher } : {}),
     },
   });
+
+
+
+/**
+ * The template's exact published JSON text. Its identifier is a hash of this content, so a copy or a downloaded
+ * file is something an XO wallet or the Blaze Tool can import as it is.
+ */
+export async function fetchRawTemplate(identifier: string): Promise<string> {
+  let response: Response;
+
+  try {
+    response = await fetch(`${BASE}/api/templates/${encodeURIComponent(identifier)}/raw`);
+  } catch {
+    throw new Error("Unable to reach the XOGrid server. Check your connection and try again.");
+  }
+
+  if (response.status === 410) {
+    throw new Error("This template was removed by a moderator.");
+  }
+
+  if (!response.ok) {
+    throw new Error(`Could not load the template JSON (${response.status}).`);
+  }
+
+  return response.text();
+}

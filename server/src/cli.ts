@@ -1,13 +1,13 @@
 import { isValidAdminIdentity, seedAdmins } from './admin.js';
 import { migrate, openDatabase } from './db.js';
 import { listTemplates, reauditAll } from './registry.js';
-import { seed } from './seed.js';
+import { seed, seedCommunity } from './seed.js';
 
 const USAGE = `Usage: cli <command>
 
 Commands:
   init     Create the database and tables (safe to run again)
-  seed     Publish the XO sample templates and set the Home spotlight (safe to run again)
+  seed     Publish the XO sample templates and the community templates, and set the Home spotlight (safe to run again)
   audit    Re-run the automated audit for every stored template
   list     Print every stored template with its badge
   admin-add <label> <identity>   Add a moderator (compressed public key, P2PKH address, or xpub)
@@ -31,8 +31,11 @@ if (command === 'init') {
     console.log(`Database ready: ${description}`);
 } else if (command === 'seed') {
     const result = await seed(db);
+    const community = await seedCommunity(db);
 
-    console.log(`Seeded: ${result.published} published, ${result.alreadyPresent} already present.`);
+    console.log(
+        `Seeded: ${result.published + community.published} published, ${result.alreadyPresent + community.alreadyPresent} already present.`,
+    );
 } else if (command === 'audit') {
     console.log(`Re-audited ${await reauditAll(db)} templates.`);
 } else if (command === 'admin-add') {

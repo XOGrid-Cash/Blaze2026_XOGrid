@@ -3,6 +3,7 @@ import {
     checkCompile,
     checkIdentifier,
     checkReferences,
+    checkResources,
     checkScenarios,
     checkSchema,
     checkSize,
@@ -36,6 +37,7 @@ export function runAudit(ctx: AuditContext): AuditReport {
         results.push(guard('references', 'Internal references', () => checkReferences(template)));
         results.push(guard('compile', 'Offline compile', () => checkCompile(template)));
         results.push(guard('scenarios', 'Test scenarios', () => checkScenarios(template)));
+        results.push(guard('resources', 'Resource links', () => checkResources(template)));
     }
 
     return { checkerVersion: CHECKER_VERSION, results };

@@ -36,6 +36,7 @@ function ConnectWalletModal({
     walletName,
     address,
     status,
+    restoring,
     start,
     disconnect,
   } = useWallet();
@@ -77,11 +78,13 @@ function ConnectWalletModal({
       return;
     }
 
-    if (connected || autoConnectStarted.current) return;
+    // A connection from earlier in this tab is being picked back up (page reload). Wait for it instead of replacing it.
+    // If it gives up, restoring turns false and this runs again.
+    if (connected || restoring || autoConnectStarted.current) return;
 
     autoConnectStarted.current = true;
     void connectWallet();
-  }, [isOpen, connected]);
+  }, [isOpen, connected, restoring]);
 
   // When a wallet finishes connecting, drop the QR
   // and close the modal shortly after.
@@ -102,6 +105,11 @@ function ConnectWalletModal({
 
     return () => window.clearTimeout(timer);
   }, [connected, isOpen, onClose]);
+
+  // True from the moment the modal opens until the QR code is ready, so the person never sees an idle "connect"
+  // button for the fraction of a second before the connection starts by itself.
+  const preparing =
+    connecting || (isOpen && !connected && !restoring && !qr && !error);
 
   function closeModal() {
     onClose();
@@ -350,7 +358,27 @@ function ConnectWalletModal({
                               {status || "Waiting for wallet connection..."}
                             </p>
                           </>
-                        ) : connecting ? (
+                        ) : restoring ? (
+                          <>
+                            <Loader2
+                              size={28}
+                              className="animate-spin text-orange-400"
+                            />
+
+                            <p className="mt-3 text-xs text-slate-300">
+                              Reconnecting to your wallet...
+                            </p>
+
+                            <button
+                              type="button"
+                              onClick={connectWallet}
+                              className="mt-3 flex items-center gap-2 text-[11px] text-slate-400 hover:text-orange-400"
+                            >
+                              <RefreshCw size={12} />
+                              Use a new QR code instead
+                            </button>
+                          </>
+                        ) : preparing ? (
                           <>
                             <Loader2
                               size={28}
@@ -519,22 +547,20 @@ function ConnectWalletModal({
                       </p>
                     </div>
 
-                    {!walletUri && !connected && (
+                    {!walletUri && !connected && !preparing && !restoring && (
                       <button
                         type="button"
                         onClick={connectWallet}
                         disabled={connecting}
                         className="wallet-connect-button mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-400 px-4 py-3 text-xs font-bold text-white shadow-lg shadow-orange-500/15 transition hover:-translate-y-0.5 hover:from-orange-400 hover:to-orange-300 disabled:cursor-not-allowed disabled:opacity-60 2xl:mt-5 2xl:rounded-xl 2xl:px-6 2xl:py-4 2xl:text-sm"
                       >
-                        {connecting ? (
-                          <Loader2 size={15} className="animate-spin" />
+                        {error ? (
+                          <RefreshCw size={15} />
                         ) : (
                           <Wallet size={15} />
                         )}
 
-                        {connecting
-                          ? "Preparing connection..."
-                          : "Connect an HD Wallet"}
+                        {error ? "Try again" : "Connect an HD Wallet"}
                       </button>
                     )}
 
@@ -643,6 +669,35 @@ function ConnectWalletModal({
                           {copied ? "Copied" : "Copy connection link"}
                         </button>
                       )}
+                    </div>
+                  ) : restoring ? (
+                    <div className="flex min-h-[290px] flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-5 text-center 2xl:min-h-[390px] 2xl:rounded-2xl 2xl:p-8 3xl:min-h-[440px]">
+                      <Loader2 size={28} className="animate-spin text-orange-400" />
+
+                      <p className="mt-3 text-sm font-semibold text-white 2xl:text-lg">
+                        Reconnecting to your wallet...
+                      </p>
+
+                      <p className="mt-1 max-w-[240px] text-[10px] leading-5 text-slate-500 2xl:text-xs">
+                        This takes a few seconds. Keep your wallet open.
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={connectWallet}
+                        className="mt-4 flex items-center gap-2 text-[11px] text-slate-400 hover:text-orange-400"
+                      >
+                        <RefreshCw size={12} />
+                        Use a new QR code instead
+                      </button>
+                    </div>
+                  ) : preparing ? (
+                    <div className="flex min-h-[290px] flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-5 text-center 2xl:min-h-[390px] 2xl:rounded-2xl 2xl:p-8 3xl:min-h-[440px]">
+                      <Loader2 size={28} className="animate-spin text-orange-400" />
+
+                      <p className="mt-3 text-sm font-semibold text-white 2xl:text-lg">
+                        Preparing your QR code...
+                      </p>
                     </div>
                   ) : (
                     <div className="flex min-h-[290px] flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-5 text-center 2xl:min-h-[390px] 2xl:rounded-2xl 2xl:p-8 3xl:min-h-[440px]">

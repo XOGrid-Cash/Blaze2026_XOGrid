@@ -37,7 +37,7 @@ The registry applies the same checks to every template, so run them before you p
 
 or write a test the way `claim-voucher.test.ts` does, calling `runAudit(...)` and `generateTemplateIdentifier(parseTemplate(...))`.
 
-The six automated checks:
+The seven automated checks:
 
 | Check | Fails when | Notes |
 |---|---|---|
@@ -47,6 +47,7 @@ The six automated checks:
 | Internal references | An output uses an undefined locking script, an input an undefined script, and similar | Expressions like `$(<variable>)` are allowed |
 | Offline compile | A locking script does not compile with sample values | Scripts that need keys or secrets are skipped, never failed |
 | Test scenarios | Never fails. It warns when none are included | XO says scenarios do not provide trust |
+| Resource links | Never fails. It warns when a resource address is not a plain `https` link (for example `http:`, `javascript:`, `data:`, or an address with a login in it) | The "resources" field is free text from the publisher and is shown as links. XOGrid does not make a flagged address clickable. A template with no resources is skipped |
 
 Badges: `unchecked` (no report), `auto-checked` (no failing check, which is not a safety claim) and `reviewed` (a moderator reviewed this exact id). Only a moderator can set `reviewed`.
 
@@ -82,7 +83,7 @@ Add an entry to `SEED_TEMPLATES` in `server/src/seed.ts`:
 ## Definition of done
 
 - [ ] Identifier computed and written down
-- [ ] All six automated checks pass or are explained
+- [ ] All seven automated checks pass or are explained
 - [ ] A test proves the contract accepts what it should and rejects what it should not
 - [ ] Ran end to end on chipnet; transaction ids recorded
 - [ ] Executed invitation opens in the Blaze Tool with no validation issues

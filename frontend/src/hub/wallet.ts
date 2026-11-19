@@ -1,6 +1,8 @@
 import { initiateDappRelay } from "@wizardconnect/core";
 import { DappConnectionManager, loadSession, clearSession, type SessionStorage } from "@wizardconnect/dapp";
 
+import { trackSigning } from "./signing";
+
 // WizardConnect (Selene, Paytaca and other WizardConnect wallets).
 //
 // The relay credentials of a live connection are kept in sessionStorage so a page reload, or moving around the site,
@@ -199,10 +201,13 @@ export async function publicKeyHex(
 
 /** Asks the wallet to sign a request from the server. Nothing is broadcast and no funds move. */
 export async function signWithWallet(session: WalletSession, request: object): Promise<string> {
-  const response = await session.manager.signTransaction({
-    transaction: request as never,
-    inputPaths: [[0, "receive", 0]],
-  });
+  // The prompt tells the person to open their wallet and approve while this waits.
+  const response = await trackSigning("proof", () =>
+    session.manager.signTransaction({
+      transaction: request as never,
+      inputPaths: [[0, "receive", 0]],
+    }),
+  );
 
   if (response.error) {
     throw new Error(`Wallet refused: ${response.error}`);

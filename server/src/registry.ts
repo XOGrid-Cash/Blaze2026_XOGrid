@@ -1,6 +1,6 @@
 import { describeTemplate, type PlainEnglish } from './describe.js';
 import { generateTemplateIdentifier, parseTemplate, serializeTemplate } from '@xo-cash/utils';
-import { hasNoFailures, MAX_TEMPLATE_BYTES, runAudit, type AuditReport, type CheckResult } from './audit/index.js';
+import { CHECKER_VERSION, hasNoFailures, MAX_TEMPLATE_BYTES, runAudit, type AuditReport, type CheckResult } from './audit/index.js';
 import { deriveBadge, type Badge } from './badges.js';
 import type { Db } from './db.js';
 import { loadRatings, type RatingStats } from './user-reviews.js';
@@ -171,6 +171,30 @@ export async function reauditAll(db: Db): Promise<number> {
     }
 
     return rows.length;
+}
+
+/**
+ * Re-runs the audit only for templates whose latest report came from an older checker version (or that have none).
+ * Safe to run on every start: once reports are current it does nothing. Returns how many templates were re-audited.
+ */
+export async function reauditStale(db: Db): Promise<number> {
+    const latest = new Map<string, string>();
+
+    for (const row of await db.selectFrom('audit_reports').select(['identifier', 'checker_version']).orderBy('id', 'asc').execute()) {
+        latest.set(row.identifier, row.checker_version);
+    }
+
+    const rows = await db.selectFrom('templates').select(['identifier', 'json']).execute();
+    let count = 0;
+
+    for (const row of rows) {
+        if (latest.get(row.identifier) !== CHECKER_VERSION) {
+            await recordAudit(db, row.identifier, row.json);
+            count += 1;
+        }
+    }
+
+    return count;
 }
 
 interface Enrichment {

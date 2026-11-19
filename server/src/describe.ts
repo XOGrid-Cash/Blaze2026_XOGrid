@@ -13,6 +13,25 @@ const list = (items: string[]): string => {
     return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 };
 
+/**
+ * Templates write amounts and values as $(<fundSatoshis>) or $(<masterSatoshis> stakeFee OP_ADD), XO's fill-in syntax.
+ * A person reading the description should see what is being filled in, so each one becomes [the variable's name], or
+ * [calculated from: a, b] when it is a small calculation. Only names the template itself defines are used.
+ */
+export function readable(text: string, variables: Json = {}): string {
+    return text.replace(/\$\(([^)]*)\)/g, (_match, inner: string) => {
+        const names = [...new Set((inner.match(/(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*/g) ?? []).filter((token) => !token.startsWith('OP_')))].map((id) =>
+            typeof variables[id]?.name === 'string' ? variables[id].name.toLowerCase() : id,
+        );
+
+        if (names.length === 0) {
+            return '[a value]';
+        }
+
+        return names.length === 1 ? `[${names[0]}]` : `[calculated from: ${names.join(', ')}]`;
+    });
+}
+
 const sentence = (text: string): string => {
     const trimmed = text.trim();
 
@@ -44,7 +63,7 @@ export function describeTemplate(template: unknown): PlainEnglish | null {
     const parts = [`${name} is a template for ${roleIds.length === 1 ? 'one role' : `${roleIds.length} roles`}${roleIds.length > 0 ? `: ${list(roleIds.map(roleName))}` : ''}.`];
 
     if (typeof t.description === 'string' && t.description.trim() !== '') {
-        parts.push(sentence(t.description));
+        parts.push(sentence(readable(t.description, variables)));
     }
 
     // Steps follow the template's start actions first, then the rest in the order they are declared.
@@ -54,13 +73,13 @@ export function describeTemplate(template: unknown): PlainEnglish | null {
         const action = actions[id] as Json;
         const who = Object.keys(action.roles ?? {}).map(roleName);
 
-        return `${index + 1}. ${action.name ?? id}${who.length > 0 ? ` (${list(who)})` : ''}${action.description ? `: ${sentence(String(action.description))}` : ''}`;
+        return `${index + 1}. ${action.name ?? id}${who.length > 0 ? ` (${list(who)})` : ''}${action.description ? `: ${sentence(readable(String(action.description), variables))}` : ''}`;
     });
 
     const whoDoesWhat = roleIds.map((id) => {
         const mine = ordered.filter((actionId) => id in ((actions[actionId] as Json).roles ?? {})).map((actionId) => String(actions[actionId].name ?? actionId));
 
-        return `${roleName(id)}${roles[id]?.description ? `: ${sentence(String(roles[id].description))}` : ''}${mine.length > 0 ? ` Takes part in: ${list(mine)}.` : ''}`;
+        return `${roleName(id)}${roles[id]?.description ? `: ${sentence(readable(String(roles[id].description), variables))}` : ''}${mine.length > 0 ? ` Takes part in: ${list(mine)}.` : ''}`;
     });
 
     const needed = new Set<string>();
@@ -77,6 +96,6 @@ export function describeTemplate(template: unknown): PlainEnglish | null {
         summary: parts.join(' '),
         steps,
         whoDoesWhat,
-        youWillNeed: [...needed].map((id) => `${variableName(id)}${variables[id]?.description ? ` - ${sentence(String(variables[id].description))}` : ''}`),
+        youWillNeed: [...needed].map((id) => `${variableName(id)}${variables[id]?.description ? ` - ${sentence(readable(String(variables[id].description), variables))}` : ''}`),
     };
 }

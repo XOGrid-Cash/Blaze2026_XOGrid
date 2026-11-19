@@ -8,6 +8,7 @@ import {
 import { serializeTemplate } from '@xo-cash/utils';
 import type { Db } from './db.js';
 import { claimVoucherTemplate } from './templates/claim-voucher.js';
+import { COMMUNITY_TEMPLATES } from './templates/community.js';
 import { publishTemplate, setSpotlight } from './registry.js';
 
 const SEED_PUBLISHER = 'xo-cash/templates';
@@ -51,6 +52,29 @@ export async function seed(db: Db): Promise<SeedResult> {
         if ('spotlight' in entry) {
             await setSpotlight(db, published.identifier, entry.spotlight, position);
             position += 1;
+        }
+    }
+
+    return result;
+}
+
+
+
+/**
+ * Publishes the templates written for XOGrid (the templates/ folder) that the registry does not have yet. Unlike
+ * seed(), this never touches the Home spotlight, so it is safe to run on every start of a live registry: it adds what
+ * is missing and leaves moderator choices alone. A template a moderator removed stays removed.
+ */
+export async function seedCommunity(db: Db): Promise<SeedResult> {
+    const result: SeedResult = { published: 0, alreadyPresent: 0 };
+
+    for (const entry of COMMUNITY_TEMPLATES) {
+        const published = await publishTemplate(db, entry.json, HUB_PUBLISHER);
+
+        if (published.created) {
+            result.published += 1;
+        } else {
+            result.alreadyPresent += 1;
         }
     }
 

@@ -19,6 +19,7 @@ import { useHasAdminToken } from "./hub/admin";
 
 import TopBanner from "./components/TopBanner";
 import ConnectWalletModal from "./components/ConnectWalletModal";
+import SigningPrompt from "./components/SigningPrompt";
 import { WalletProvider, useWallet } from "./hub/WalletContext";
 
 import xogridlogo from "./assets/images/xogridlogo.png";
@@ -138,6 +139,7 @@ function App() {
       </Routes>
 
       <WalletModalHost />
+      <SigningPrompt />
 
       {isLoading && <LoadingScreen exiting={isExiting} />}
     </WalletProvider>

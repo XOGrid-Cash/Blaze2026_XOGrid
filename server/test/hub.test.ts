@@ -102,7 +102,7 @@ describe('publishing', () => {
         const detail = (await get(`/api/templates/${identifier}`)).json();
         const ids = detail.auditReport.results.map((r: { id: string }) => r.id);
 
-        expect(ids).toEqual(['schema', 'size', 'identifier', 'references', 'compile', 'scenarios']);
+        expect(ids).toEqual(['schema', 'size', 'identifier', 'references', 'compile', 'scenarios', 'resources']);
         expect(detail.audit.counts.fail).toBe(0);
     });
 

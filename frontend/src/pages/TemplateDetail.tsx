@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -17,6 +17,10 @@ import { flagTemplate, getTemplate, listReviews, type CheckResult } from "../hub
 import { useLoad } from "../hub/useLoad";
 import { ReviewForm } from "../components/hub/ReviewForm";
 import { Stars } from "../components/hub/Stars";
+import { TemplateContents } from "../components/hub/TemplateContents";
+import { TemplateExport } from "../components/hub/TemplateExport";
+import { TemplateResources } from "../components/hub/TemplateResources";
+import { viewTemplate } from "../hub/templateView";
 
 const badgeLabel = { unchecked: "Unchecked", "auto-checked": "Auto-checked", reviewed: "Reviewed" } as const;
 const badgeStyle = {
@@ -55,6 +59,7 @@ function TemplateDetail() {
   const [copied, setCopied] = useState(false);
 
   const detail = template.data;
+  const view = useMemo(() => viewTemplate(detail?.template), [detail?.template]);
 
   async function sendFlag() {
     try {
@@ -152,14 +157,17 @@ function TemplateDetail() {
                   </button>
                 </div>
                 {!detail.removed && (
-                  <a
-                    href={`/api/templates/${detail.identifier}/raw`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-3 inline-block text-sm font-semibold text-orange-400 hover:text-orange-300"
-                  >
-                    Open the template JSON
-                  </a>
+                  <div className="mt-4 space-y-3">
+                    <TemplateExport identifier={detail.identifier} name={detail.name} />
+                    <a
+                      href={`/api/templates/${detail.identifier}/raw`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block text-sm font-semibold text-orange-400 hover:text-orange-300"
+                    >
+                      Open the template JSON
+                    </a>
+                  </div>
                 )}
               </div>
             </section>
@@ -203,6 +211,10 @@ function TemplateDetail() {
                 )}
               </section>
             )}
+
+            {!detail.removed && <TemplateResources resources={view.resources} />}
+
+            {!detail.removed && <TemplateContents view={view} />}
 
             {detail.auditReport && (
               <section className={card}>

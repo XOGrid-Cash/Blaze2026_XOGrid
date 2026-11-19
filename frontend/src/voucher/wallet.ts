@@ -3,6 +3,7 @@ import { DappConnectionManager } from '@wizardconnect/dapp';
 import type { Chain } from './chain';
 import type { Coin } from './core';
 import { walletLockingBytecode } from './core';
+import { trackSigning } from '../hub/signing';
 
 /**
  * What the demo needs from a wallet: connect, share public keys, and sign a transaction we built. Selene connects
@@ -95,7 +96,11 @@ export class WizardConnectWallet implements WalletConnector {
             throw new Error('No wallet connected.');
         }
 
-        const response = await this.manager.signTransaction({ transaction: request as never, inputPaths: [[0, pathName, addressIndex]] });
+        const manager = this.manager;
+        // A real transaction: the prompt tells the person to open their wallet, check it and approve.
+        const response = await trackSigning('transaction', () =>
+            manager.signTransaction({ transaction: request as never, inputPaths: [[0, pathName, addressIndex]] }),
+        );
 
         if (response.error) {
             throw new Error(`The wallet refused: ${response.error}`);

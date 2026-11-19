@@ -209,7 +209,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     let created: WalletSession | undefined;
     const handlers = handlersFor(() => created);
-    const resumed = resumeWalletSession(handlers.onStatus, handlers.onReady, handlers.onDisconnect);
+    let resumed: WalletSession | null = null;
+
+    try {
+      resumed = resumeWalletSession(handlers.onStatus, handlers.onReady, handlers.onDisconnect);
+    } catch {
+      // A stored pairing the library rejects (damaged, or saved in an older format) must not take the whole site
+      // down. Forget it; the person simply connects again.
+      forgetStoredWalletSession();
+      writeActivity(0);
+
+      return;
+    }
 
     if (!resumed) return;
 

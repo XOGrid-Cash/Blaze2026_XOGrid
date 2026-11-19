@@ -2,7 +2,7 @@ import { generateTemplateIdentifier, parseTemplate, serializeTemplate } from '@x
 import { compileLockingBytecodeFromTemplateLockingScriptIdentifier } from '@xo-cash/engine';
 import { secp256k1 } from '@bitauth/libauth';
 
-export const CHECKER_VERSION = '1';
+export const CHECKER_VERSION = '2';
 
 /** Above this size a template is rejected at publish time and fails the size check. */
 export const MAX_TEMPLATE_BYTES = 256 * 1024;
@@ -360,6 +360,87 @@ export function checkScenarios(template: LooseTemplate): CheckResult {
         status: 'pass',
         message: `${scenarios.length} scenario${scenarios.length === 1 ? '' : 's'} included. XO notes that scenarios are not suitable for providing trust, so this is informational.`,
     };
+}
+
+/**
+ * Check 7: every resource link is a plain https address. The "resources" field is free text written by the publisher
+ * and shown to people as links, so anything else (javascript:, data:, http:, an address with a login in it) is flagged.
+ * This only ever warns: the page does not link such an address, so it cannot be clicked, but a person reading the
+ * report should know the publisher wrote it.
+ */
+export function checkResources(template: LooseTemplate): CheckResult {
+    const title = 'Resource links';
+    const resources: unknown = template.resources;
+
+    if (resources === undefined || (Array.isArray(resources) && resources.length === 0)) {
+        return { id: 'resources', title, status: 'skipped', message: 'No resources (sources or credits) listed.' };
+    }
+
+    if (!Array.isArray(resources)) {
+        return { id: 'resources', title, status: 'warn', message: 'The resources field is not a list, so no sources or credits are shown.' };
+    }
+
+    const problems: string[] = [];
+
+    resources.forEach((entry: unknown, index: number) => {
+        const item = asRecord(entry);
+        const label = typeof item.name === 'string' && item.name.trim() !== '' ? item.name.trim().slice(0, 60) : `Resource ${index + 1}`;
+        const reason = resourceLinkProblem(item.url);
+
+        if (reason) {
+            problems.push(`${label}: ${reason}`);
+        }
+    });
+
+    if (problems.length === 0) {
+        return {
+            id: 'resources',
+            title,
+            status: 'pass',
+            message: `${resources.length} resource link${resources.length === 1 ? '' : 's'}, all plain https addresses.`,
+        };
+    }
+
+    return {
+        id: 'resources',
+        title,
+        status: 'warn',
+        message: `${problems.length} of ${resources.length} resource link${resources.length === 1 ? ' is' : 's are'} not a plain https address. XOGrid does not make these clickable.`,
+        details: problems.slice(0, 10),
+    };
+}
+
+/** Why a resource address is not a plain https link, or undefined when it is one. */
+function resourceLinkProblem(value: unknown): string | undefined {
+    if (typeof value !== 'string' || value.trim() === '') {
+        return 'no address given';
+    }
+
+    let url: URL;
+
+    try {
+        url = new URL(value.trim());
+    } catch {
+        return 'not a valid address';
+    }
+
+    if (url.protocol === 'http:') {
+        return 'uses http, not https';
+    }
+
+    if (url.protocol !== 'https:') {
+        return `uses ${url.protocol.replace(':', '')}:, which is not a web link`;
+    }
+
+    if (url.username !== '' || url.password !== '') {
+        return 'has a login embedded in the address';
+    }
+
+    if (value.length > 2000) {
+        return 'address is unusually long';
+    }
+
+    return undefined;
 }
 
 function firstLine(error: unknown): string {

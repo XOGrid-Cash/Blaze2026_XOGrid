@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -63,7 +63,11 @@ function Publish() {
   const [copied, setCopied] = useState<boolean>(false);
   const [jsonValid, setJsonValid] = useState<boolean>(false);
 
+  const [dragging, setDragging] = useState<boolean>(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Counts drag enters and leaves, because moving over a child element fires "leave" on the zone itself.
+  const dragDepth = useRef(0);
 
   const byteSize = new TextEncoder().encode(jsonText).length;
 
@@ -108,24 +112,17 @@ function Publish() {
     validateJSON(value);
   };
 
-  const handleFileChange = async (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-
-    if (!file) return;
-
+  // One path for a picked file and a dropped file, so both get exactly the same checks.
+  const loadFile = async (file: File): Promise<void> => {
     clearMessages();
 
     if (!file.name.toLowerCase().endsWith(".json")) {
       setError("Please select a valid JSON file.");
-      event.target.value = "";
       return;
     }
 
     if (file.size > MAX_FILE_SIZE) {
       setError("This file exceeds the 256 KB upload limit.");
-      event.target.value = "";
       return;
     }
 
@@ -138,9 +135,93 @@ function Publish() {
     } catch {
       setError("We couldn't read this file. Please try another one.");
     }
+  };
 
+  const handleFileChange = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (file) {
+      await loadFile(file);
+    }
+
+    // Lets the same file be chosen again after it was removed or rejected.
     event.target.value = "";
   };
+
+  const carriesFiles = (event: { dataTransfer: DataTransfer | null }) =>
+    Array.from(event.dataTransfer?.types ?? []).includes("Files");
+
+  const handleDragEnter = (event: DragEvent<HTMLLabelElement>) => {
+    if (!carriesFiles(event)) return;
+
+    event.preventDefault();
+    dragDepth.current += 1;
+    setDragging(true);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLLabelElement>) => {
+    if (!carriesFiles(event)) return;
+
+    // Without this the browser refuses the drop.
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLLabelElement>) => {
+    if (!carriesFiles(event)) return;
+
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+
+    if (dragDepth.current === 0) {
+      setDragging(false);
+    }
+  };
+
+  const handleDrop = async (event: DragEvent<HTMLLabelElement>) => {
+    if (!carriesFiles(event)) return;
+
+    event.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+
+    const files = Array.from(event.dataTransfer.files);
+
+    if (files.length === 0) return;
+
+    if (files.length > 1) {
+      clearMessages();
+      setError("Please drop one file at a time.");
+      return;
+    }
+
+    await loadFile(files[0]);
+  };
+
+  // A file dropped outside the upload area would make the browser open it and leave this page, losing what was typed.
+  // Refuse those drops, and show that only the upload area accepts a file.
+  useEffect(() => {
+    const guard = (event: globalThis.DragEvent) => {
+      if (!Array.from(event.dataTransfer?.types ?? []).includes("Files")) return;
+
+      event.preventDefault();
+
+      const inside = event.target instanceof Element && event.target.closest("[data-drop-zone]");
+
+      if (event.type === "dragover" && event.dataTransfer && !inside) {
+        event.dataTransfer.dropEffect = "none";
+      }
+    };
+
+    window.addEventListener("dragover", guard);
+    window.addEventListener("drop", guard);
+
+    return () => {
+      window.removeEventListener("dragover", guard);
+      window.removeEventListener("drop", guard);
+    };
+  }, []);
 
   const handleRemoveFile = () => {
     setJsonText("");
@@ -493,13 +574,22 @@ function Publish() {
                   type="file"
                   accept=".json,application/json"
                   onChange={handleFileChange}
-                  className="hidden"
+                  className="peer sr-only"
                   id="template-json-file"
                 />
 
                 <label
                   htmlFor="template-json-file"
-                  className="publish-upload group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-dashed border-violet-400/25 bg-violet-400/[0.035] px-5 py-9 text-center transition-all duration-300 hover:border-orange-400/45 hover:bg-orange-400/[0.035] sm:py-11 2xl:py-14"
+                  data-drop-zone
+                  onDragEnter={handleDragEnter}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`publish-upload group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border border-dashed px-5 py-9 text-center transition-all duration-300 peer-focus-visible:border-orange-400/70 peer-focus-visible:ring-2 peer-focus-visible:ring-orange-400/40 sm:py-11 2xl:py-14 ${
+                    dragging
+                      ? "border-orange-400/70 bg-orange-400/[0.09]"
+                      : "border-violet-400/25 bg-violet-400/[0.035] hover:border-orange-400/45 hover:bg-orange-400/[0.035]"
+                  }`}
                 >
                   <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-violet-500/[0.08] blur-3xl transition duration-500 group-hover:bg-orange-500/[0.10]" />
 
@@ -508,7 +598,7 @@ function Publish() {
                   </span>
 
                   <span className="relative text-sm font-semibold text-white/80 transition-colors group-hover:text-orange-300">
-                    Drop your JSON file here or browse
+                    {dragging ? "Release to load this file" : "Drop your JSON file here or browse"}
                   </span>
 
                   <span className="relative mt-2 text-xs text-white/35">
