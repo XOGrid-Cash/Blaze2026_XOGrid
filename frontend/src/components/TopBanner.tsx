@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, ExternalLink, Presentation } from "lucide-react";
+import { Check, Copy, ExternalLink, Presentation, QrCode } from "lucide-react";
 import { FaGithub } from "react-icons/fa";
 
 import { banner } from "../config/banner";
+import DonationQrModal from "./DonationQrModal";
 
 // The required BCH BLAZE 2026 banner: slides, repository and the EMBER2026 donation address.
 // It sits in normal page flow at the very top of every page and scrolls away with it.
@@ -17,11 +18,15 @@ const OFFSET_VAR = "--banner-offset";
 const shortAddress = (address: string): string =>
   address.length > 26 ? `${address.slice(0, 14)}…${address.slice(-8)}` : address;
 
+const iconButtonClass =
+  "inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 text-white/70 transition hover:border-orange-400/40 hover:text-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400";
+
 const linkClass =
   "inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-medium text-white/85 transition hover:bg-white/[0.08] hover:text-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400";
 
 export default function TopBanner() {
   const [copied, setCopied] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const bar = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -110,13 +115,26 @@ export default function TopBanner() {
               type="button"
               onClick={copyAddress}
               aria-label="Copy the EMBER2026 donation address"
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 text-white/70 transition hover:border-orange-400/40 hover:text-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+              title="Copy address"
+              className={iconButtonClass}
             >
               {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setQrOpen(true)}
+              aria-label="Show the EMBER2026 donation address as a QR code"
+              aria-haspopup="dialog"
+              title="Show QR code"
+              className={iconButtonClass}
+            >
+              <QrCode size={13} />
             </button>
           </span>
         </div>
       </div>
+
+      <DonationQrModal isOpen={qrOpen} onClose={() => setQrOpen(false)} address={banner.emberAddress} />
     </div>
   );
 }
