@@ -88,6 +88,12 @@ export default function TopBanner() {
             </span>
           )}
 
+          <a href={banner.startRepoUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
+            <FaGithub size={14} className="text-purple-500" />
+            Start GitHub
+            <ExternalLink size={11} className="text-white/40" />
+          </a>
+
           <a href={banner.repoUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
             <FaGithub size={14} className="text-orange-400" />
             GitHub
