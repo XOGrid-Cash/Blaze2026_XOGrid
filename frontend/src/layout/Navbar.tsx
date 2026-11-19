@@ -49,6 +49,10 @@ function Navbar() {
       section: "featured-templates",
     },
     {
+      name: "Explore",
+      href: "/explore",
+    },
+    {
       name: "Demo",
       href: "/demo",
     },

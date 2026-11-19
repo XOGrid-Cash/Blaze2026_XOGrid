@@ -2,6 +2,7 @@ import { Wrench } from 'lucide-react';
 // A copy of frontend/src/assets/images/xogridlogo.png, so templates/ builds on its own (a test checks they match).
 import logo from './assets/xogridlogo.png';
 import { useEffect, useState, type ReactNode } from 'react';
+import { BadgerReleasePanel } from './components/BadgerReleasePanel';
 import { DripMinePanel } from './components/DripMinePanel';
 import { TokenBurnerPanel } from './components/TokenBurnerPanel';
 import { Pill, cardClass } from './components/ui';
@@ -11,7 +12,7 @@ const TEMPLATES: { name: string; folder: string; panel?: () => ReactNode }[] = [
     { name: 'Drip Mine', folder: 'drip-mine', panel: () => <DripMinePanel /> },
     { name: 'Token Burner', folder: 'token-burner', panel: () => <TokenBurnerPanel /> },
     { name: 'Block Points', folder: 'block-points' },
-    { name: 'Badgers Stake', folder: 'badgers-stake' },
+    { name: 'Badgers Stake', folder: 'badgers-stake', panel: () => <BadgerReleasePanel /> },
     { name: 'Revenue Split', folder: 'revenue-split' },
 ];
 

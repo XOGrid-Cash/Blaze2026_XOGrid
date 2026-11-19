@@ -19,6 +19,7 @@ import { ReviewForm } from "../components/hub/ReviewForm";
 import { Stars } from "../components/hub/Stars";
 import { TemplateContents } from "../components/hub/TemplateContents";
 import { TemplateExport } from "../components/hub/TemplateExport";
+import { inviteToolLink } from "../config/inviteTool";
 import { TemplateResources } from "../components/hub/TemplateResources";
 import { viewTemplate } from "../hub/templateView";
 
@@ -159,6 +160,20 @@ function TemplateDetail() {
                 {!detail.removed && (
                   <div className="mt-4 space-y-3">
                     <TemplateExport identifier={detail.identifier} name={detail.name} />
+                    {inviteToolLink(detail.identifier) && (
+                      <p className="text-sm text-slate-400">
+                        Want to use it?{" "}
+                        <a
+                          href={inviteToolLink(detail.identifier)?.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-orange-400 hover:text-orange-300"
+                        >
+                          Build an invitation
+                        </a>{" "}
+                        to {inviteToolLink(detail.identifier)?.what}, ready to import in your XO wallet.
+                      </p>
+                    )}
                     <a
                       href={`/api/templates/${detail.identifier}/raw`}
                       target="_blank"
