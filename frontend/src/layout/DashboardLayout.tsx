@@ -42,7 +42,7 @@ const navigation: NavigationItem[] = [
     icon: Compass,
   },
   {
-    label: "Build template",
+    label: "Publish template",
     to: "/publish",
     icon: Upload,
   },

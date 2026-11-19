@@ -20,13 +20,11 @@ function Footer() {
   const currentYear = new Date().getFullYear();
   const location = useLocation();
 
-  const GITHUB_URL = "https://github.com/YOUR_GITHUB";
-
   const footerLinks: Record<string, FooterLink[]> = {
     Platform: [
       { name: "Home", href: "/" },
       { name: "How It Works", href: "/#how-it-works" },
-      { name: "Build Template", href: "/publish" },
+      { name: "Publish Template", href: "/publish" },
     ],
     Resources: [
       { name: "Policy", href: "/policy" },

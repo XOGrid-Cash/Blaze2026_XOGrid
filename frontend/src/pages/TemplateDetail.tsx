@@ -223,7 +223,7 @@ function TemplateDetail() {
                   {detail.auditReport.results.map((check) => (
                     <li key={check.id} className="flex gap-3">
                       <span className="mt-0.5">{checkIcon(check.status)}</span>
-                      <div>
+                      <div className="max-w-full break-all md:break-normal">
                         <p className="text-sm font-semibold text-white">{check.title}</p>
                         <p className="text-sm text-slate-400">{check.message}</p>
                         {check.details?.map((line) => (
