@@ -1,103 +1,112 @@
-# Handoff: XOGrid (formerly XO Template Hub; as of 2026-11-15)
+# XOGrid handoff (state at 2026-11-19, late evening Lagos time)
 
-## Layout
-- `server/`  Fastify + Kysely/SQLite API, audit checks, admin API. `npm test` (79 tests).
-- `web/`     React + Vite + Tailwind frontend. `npm run build`; dev: `npm run dev` (proxies /api to :3000).
-- `probe/`   Standalone page to test Selene login signing. See `probe/README.md`.
-- `Dockerfile` (repo root, UNTESTED), one container serves API + built web app.
+Read this first, then `xogrid-dump.txt` (made by `dump_xogrid.sh`). Where this file and an older `HANDOFF_FULL.md` disagree, this file wins.
 
-## Run locally
-1. `cd server && npm install && npm run cli -- seed`
-2. `cd web && npm install --legacy-peer-deps && npm run build`
-3. `cd server && ADMIN_IDENTITIES="you=<pubkey|address|xpub>" npm run dev`  then open http://localhost:3000
+## 1. Project in one paragraph
 
-## Done and tested
-Registry, audit checks, flags, reviews, policy preview, admin API, UI (Home, Browse, Template, Admin) driven end to end in a real browser against the live API.
+XOGrid is a "Docker Hub for XO templates", built for BCH BLAZE 2026. A registry stores XO wallet templates, audits them, lets people review and flag them, and shows them in a web app. Team: Nathaniel (angelnath) owns the server, registry, audit checks, admin login, wallet-signed reviews, the Claim-Code Voucher template and the docs. John owns `frontend/` (the real UI). Miguel owns hosting (Render, Supabase, Vercel) and the extra templates in `templates/`. Submission is **Nov 22, 15:00 UTC+1**.
 
-## Added 2026-11-11
-- `GET /api/templates/:id/raw` (verifiable, immutable, 410 when removed), read-only CORS, `admin-add|admin-list|admin-remove` CLI.
+Repo: `XOGrid-Cash/Blaze2026_XOGrid`, local clone `~/XOGrid`. Layout: `server/` (Fastify, Kysely, SQLite locally and PostgreSQL in production), `frontend/` (React, Vite, Tailwind), `templates/` (one folder per contract system, plus `web/`, the separate invitation tool at xogrid-invite.vercel.app), `docs/`.
 
-## Verified 2026-11-11 (sandbox with no registry/chipnet access)
-- Dockerfile logic: clean-room replay of every build step (npm install, web build, server tsc, prune) plus the final stage
-  built and run as a real container on a stand-in base image: non-root user, /data volume, restart keeps data. Not
-  verified: pulling node:22-slim and the apt-get step (no registry access here).
-- First start seeds the 5 sample templates when the database is empty (SEED_ON_EMPTY=0 disables).
-- yarn classic (1.22) install, test, typecheck and build all pass; server needs `vite` declared explicitly for vitest.
-- Selene signs the login challenge; Admin page login works end to end.
+## 2. Working rules (keep following these)
 
-## Added 2026-11-14: Claim-Code Voucher (our novel template)
-- `server/src/templates/claim-voucher.ts`: P2SH32 hash lock, `OP_SHA256 <codeHash> OP_EQUAL`; actions createVoucher / claimVoucher. Seeded as the 6th hub template (publisher "XO Template Hub").
-- Verified offline in the BCH 2026 VM: right code accepted; wrong code, empty code and the hash itself rejected. Script mutations are caught by tests.
-- HAZARD: bytes variables must be passed as HEX text. Raw Uint8Array compiles to a different lock script and strands funds.
-- Blaze Tool opens our chipnet invitation cleanly once the tool's wallet is switched to chipnet.
-- `server/scripts/chipnet-voucher.ts issue | claim <code>` has NOT been run yet. Unknowns: whether the engine tracks the voucher output (role on the output), and whether a claim with zero template outputs plus change builds.
+- Never touch `frontend/src/voucher/core.ts` without tests. Never broadcast unless `verifySignedIssue` passes. Voucher bytes variables are passed as HEX text, never as a raw `Uint8Array`.
+- Commits carry **no Claude attribution** (the user's standing rule overrides any tool reminder to add one).
+- Do not write the user's Build with XO feedback; give notes on what happened. The README says plainly that the server and first web app were prototyped before Nov 14.
+- The database URL lives only in Render. Never point `TEST_DATABASE_URL` at the live database.
+- Tell John to pull before he pushes after every delivery. He pushes often.
+- Deliver **individual files**, never zip bundles. State each file's destination repo path in a table every time.
+- Run `tsc --noEmit -p .`, the tests and `npm run build` before delivering code. Never claim anything wallet-related is verified: the sandbox cannot reach the WizardConnect relay.
+- Corrected files are delivered directly, not explained first. Terminal commands come one at a time with checkpoints. Use `python3 << 'PYEOF'` for file writes with special characters, never bash heredocs for those.
+- Start each session with a full codebase dump (`dump_xogrid.sh`) before writing code. End with a handoff document.
 
-## Not done / unverified
-- Demo page is a stub. Needs the mainnet BCH transaction (recoverable, minimal funds; chipnet first).
-- Selene signing the login challenge: run the probe. Until it passes, admin login by wallet is unproven.
-- `Engine.create` in a browser, an invitation in the Blaze Tool, Docker build, yarn install.
-- Banner: slides URL and EMBER2026 CashTokens address are placeholders (VITE_SLIDES_URL, VITE_EMBER_ADDRESS).
-- Moderator spotlight editing UI is minimal ("Feature only this").
-- Coordinate with Miguel on whose backend is used.
+## 3. What exists and works (pushed to main, last known commit `74394ab` plus Batch C)
 
+### Registry and server
+- Five community templates are in the registry, published by `seedCommunity()` on **every server start** (`SEED_COMMUNITY=0` turns it off). Template JSON is vendored in `server/src/templates/community-data.ts`, **generated** by `server/scripts/sync-community-templates.mjs` from `templates/<slug>/template.json`. A test fails if the copy and the folder drift.
+- Identifiers (each must match its README, enforced by test):
 
-## 2026-11-15
-- Project renamed to **XOGrid** everywhere (UI, login challenge text, package names, Dockerfile, seed publisher). The only remaining old-name string is inside `server/test/fixtures/signed-message-vectors.json`, a signed test vector that must not be edited.
-- New working repo: github.com/XOGrid-Cash/Blaze2026_XOGrid (fork of StrungSafe/Blaze2026). The code was brought in as stages pushed to main on 2026-11-15 (docs, server, engine scripts and probe, web app, Demo page, reviews, docs and Docker).
-- Hackathon rule (user's reading): ideation before Nov 14, the majority of the work after it. The hub server, admin login and web app were prototyped before Nov 14. Do not present them as written inside the window; the README must say so and the remaining work (Demo page, voucher flow, mainnet transaction, polish) happens in the new repo.
-- Chipnet voucher cycle verified: issue tx d21098db7a99f59a215adecf78d8413eac943235b8bf48678c544eaad3b80cd1, claim tx 31375029f898ffba7867122c2e4f1ce6346017420e1911d614a7775511432dad. Both invitations are Completed in the Blaze Tool (chipnet), template imported from `claim-voucher-template.json`.
-- Engine lessons: (1) the Electrum cache is a process-wide singleton, so start-up retry must re-run the whole process (`scripts/_engine.ts`); (2) `executeAction` broadcasts first and then releases coin reservations, which can throw `UnspentOutputNotFoundInStoreError` after a successful broadcast, so `chipnet-voucher.ts` reads the hash from the stored invitation; (3) the claim code is saved to `.xo-demo/voucher-code.txt` before broadcasting.
-- Tests: 79 passing.
+| Template | Identifier |
+|---|---|
+| badgers-stake | `991a7bbd2337748e5537850eef69fe34b88b5ad29b3d8de26a1156df2b4c66e7` |
+| block-points | `9941f723c962e64956c5dcbc9e97e6a735736e4a8e94b24d7d77e6b0eeee3e5a` |
+| drip-mine | `346048b296ba8a35dc44caddd80d5387aba3e3a0be973a568af804699b7f1185` |
+| revenue-split | `b17ba2ee55b392f959155a9b86d58137ebfef783041c092496ddb887f9d8654e` |
+| token-burner | `1ef44c322bbcd2db0f376b9359a1255a6560e0365a21d8811c4d85b3b57247e0` |
 
-### Later on 2026-11-15
-- New engine 0.1.1-next.18029697917 verified: 102 tests passed, a second chipnet voucher pair (a0c6bae7... / 2caca1f2...) completed in the Blaze Tool.
-- Added wallet-signed community reviews (rating 1-5, text 3-1000, one per wallet per template, nonce single-use, 5 minute challenge). Files: server/src/user-reviews.ts, db.ts (user_reviews table), app.ts routes, admin-routes.ts hide/unhide, registry.ts (userReviewCount, averageRating, sort=rating).
-- Added server/src/describe.ts and `plainEnglish` on template detail.
-- Message-proof caveat: a message signature over different text recovers an unrelated key (no error). Safe, since a signer can only ever publish under a key they hold, but it is why the UI should prefer transaction proofs.
-- Tests: 120 passing (8 files).
-- Stretch goal, not built: let people create XO templates from scratch in plain English, no code. Idea: a guided form that fills a small set of patterns (payment, escrow, voucher, split) and emits a template that must pass the same six audit checks before it can be published.
-- Pending: push staged PRs once Miguel grants write access; frontend dev builds the review UI against docs/FRONTEND.md; Miguel's templates to integrate; mainnet Demo-page run; real docker build.
+- Audit has **seven** checks now (schema, size, identifier, references, compile, scenarios, **resources**). `CHECKER_VERSION` is `2`. `reauditStale()` runs at startup and re-audits only templates whose newest report is from an older version.
+- Resource-link check: warns (never fails) on anything that is not a plain https link (http, javascript:, data:, embedded login, malformed, missing, not a list). A template with no resources is skipped.
+- `server/src/describe.ts` turns `$(<fundSatoshis>)` style placeholders into `[amount to fund]` or `[calculated from: a, b]` in the plain-English steps.
+- Seed command (`cli.ts seed`) publishes the sample and community templates.
 
-### Repo state after the stages (2026-11-15)
-- `main` of XOGrid-Cash/Blaze2026_XOGrid holds: server/ (registry, audit, admin login, reviews), probe/, web/ (our React and TypeScript app), docs/.
-- John (frontend dev) pushed a landing page in `frontend/` (React JSX, Vite). It is separate from `web/`. Open decision for John and Nathaniel: which UI is the real one, or how the landing page and `web/` pages are combined. `docs/FRONTEND.md` is the API contract either way. The Dockerfile at the repo root builds `web/`; point it at `frontend/` if that becomes the main UI.
-- `server/Dockerfile` (from the earlier snapshot Miguel merged) and the root `Dockerfile` both exist. The root one builds server and web together. Neither is tested with a real `docker build` yet.
+### Frontend
+- Template detail page: **Sources and credits**, **Template contents** (collapsible actions, transactions, locking scripts, CashAssembly scripts, constants, variables), **Copy JSON** and **Download .json** (both from `/api/templates/:id/raw`), and a "Build an invitation" link for the three templates the invitation tool supports (config in `frontend/src/config/inviteTool.ts`, override with `VITE_INVITE_TOOL_URL`).
+- Publish page: drag and drop. A picked file and a dropped file share one `loadFile()` check (.json, 256 KB, one file). A file dropped outside the zone is refused so the browser does not navigate away.
+- Wallet: shared connection in `hub/WalletContext.tsx`; the modal starts the WizardConnect QR on open (one click). It waits while a stored session is "restoring" and offers "Use a new QR code instead". "Connect an HD Wallet" only shows as "Try again" after an error. A damaged stored session is discarded instead of crashing the site.
+- Signing prompt: `hub/signing.ts` (`trackSigning`) plus `components/SigningPrompt.tsx`, mounted once in `App.tsx`. Two wordings: "proof" (nothing moves) for reviews and admin login, "transaction" (moves funds) for the Demo. Cancel, Escape, a 25-second "nothing in your wallet?" hint.
+- Navbar has **Explore** (between Featured Templates and Demo).
 
-### Mainnet proof (2026-11-16)
-- Demo page, Selene over WizardConnect, mainnet, Claim-Code Voucher template 317c4947b5b9cc71d1fe01616cdc930b6ca3ef5808700c68d1cb0696e79b4911.
-- Issue: d77b111e4db749c177cc62d2524c0dd89b0b2ca8b2df57039e2b21e7b68c73e1 (1,000 sat voucher, fee 400).
-- Claim: b669d2b9ecb035fe3ee63613efdc6cf51cdf7e4112c52c16d2043a8d30fea919 (750 sat out, fee 250).
-- The voucher output address derived from the claim code matches the issue transaction's output.
+### Invitation tool (`templates/web`, Vercel)
+- Drip Mine and Token Burner panels existed. **Badgers Stake release panel** added: lists locks at the live mainnet contract address, reads each lock's commitment (staker key hash, 18 zero bytes, stake length as 2 little-endian bytes), ignores the masterBadger, enables Release only when the lock period has passed, and builds an invitation whose three outputs (BadgerCoins, Honey NFT receipt, released BCH minus 3000 sats) all go to the staker. 10 tests, including one where the VM rejects a lock whose stake length is wrong.
 
+## 4. Decisions made, and why
 
-## 2026-11-18: shared wallet and banner
-- Real UI is `frontend/` (React, Vite, Tailwind). `web/` is a backend test stub, to be mined and then deleted.
-- One site-wide wallet connection: `frontend/src/hub/WalletContext.tsx` (`useWallet()`), mounted in `App.tsx` with a single
-  `ConnectWalletModal`. Navbar, Admin sign-in, ReviewForm and Demo all use it. The Demo adopts the shared session
-  (`WizardConnectWallet.adopt`). WalletConnect was dropped from the modal. The connection is in memory; a reload ends it.
-  The navbar and the DashboardLayout header show the wallet's shortened receive address (not the wallet name).
-- Fixed top elements use `top: var(--banner-offset, 0px)` so the banner never covers them (navbar, DashboardLayout sidebar,
-  Docs sidebar). Admin no longer draws its own header: it renders inside DashboardLayout.
-- Required top banner: `components/TopBanner.tsx` + `config/banner.ts`. EMBER2026 address is set (token-aware, checksum
-  verified); `VITE_SLIDES_URL` is still unset and the banner says "Slides: link coming soon".
-- Verified: `tsc --noEmit` and `npm run build` pass; banner, navbar offset, connect modal and Admin connect button checked in
-  a real browser at desktop and 375px width. NOT verified: a live Selene connection through the new modal, Admin login,
-  a review signed through it, and the Demo adopting the shared session (the sandbox blocks the WizardConnect relay).
-  Test each with a real wallet before relying on it.
-- Still open: Dashboard shows mock data; delete `web/` after mining; slides URL;
-  set `ADMIN_IDENTITIES` on Render (yours, Miguel's, John's); README/docs now point at `frontend/`.
+| Decision | Why |
+|---|---|
+| Seed community templates on every start, not only when the DB is empty | The live Supabase DB already holds data; `seed()` only runs on an empty DB. `seedCommunity()` never touches the Home spotlight and never revives a moderator-removed template. |
+| Vendor `template.json` into `server/src` via a generated file | The Render image contains only `server/`. A test compares it with `templates/*/template.json` so drift fails the build. |
+| Export serves `/raw`, not a re-stringified object | The identifier is a hash of the exact text; re-stringifying corrupts `<bigint: 0n>` values. |
+| Resources are untrusted: https links only, plain text otherwise, lengths capped | A published template with a `javascript:` URL was accepted by the registry with an `auto-checked` badge, so the frontend is the real defence (verified in a real browser, nothing executed). |
+| Resource check **warns, never fails** | A bad link cannot be clicked; failing would block otherwise valid templates. Checker version bumped so old reports refresh once. |
+| Viewer links https only (was http+https) | Keep the page and the audit consistent. |
+| One shared `trackSigning` wrapper instead of editing every page | Reviews, admin login and the Demo all get the prompt the same way. |
+| Invitation tool defaults to chipnet, mainnet needs an explicit real-money confirmation | Money-path rule. The Badgers panel is the exception in default: its live contract exists on mainnet only, so it opens on mainnet and says chipnet is empty. |
+| Badgers release panel builds only when the lock is ready (uses chain tip) | The VM check cannot see the relative time lock; the network enforces it at mining time. If the count is off by one, the wallet's broadcast fails harmlessly. |
+| Existing files are changed by an exact-string apply script, never overwritten | John and Miguel push often; overwriting whole files could erase their work. |
+| Review tracking recommendation (not yet final): hybrid | Pay a small amount to one XOGrid review address AND carry an OP_RETURN starting with an `XGRD` prefix, a version, the template identifier, a rating and a hash of the text. History is rebuilt from the address with plain Electrum, the prefix filters strays, the dust and fee discourage spam. The full text stays off-chain (OP_RETURN is small). Moderators hide reviews in the database; chain data cannot be deleted. John prefers the prefix approach for easy history rebuilds; the hybrid keeps that. A decision record for the judges is still to be written. |
 
-## 2026-11-18 (later): gating, real dashboard, persistence
-- Wallet: mainnet address only; resumes after reload (sessionStorage); 20 minute idle limit; Disconnect sends `sendDisconnect` and clears stored credentials.
-- `/dashboard` and `/publish` need a connected wallet; `/admin` is a 404 unless a wallet is connected or a moderator session exists; unknown URLs show a 404 page.
-- Dashboard reads the live registry (totals, your templates by publisher address, newest templates). `data/mockDashboard.*` is now unused and can be deleted.
-- Admin: Feature/Unfeature replace "Feature only" (adds to the 6-slot list). "Back to website" and "Return to XOGrid" now read "Back to homepage".
-- Demo: template picker; the Claim-Code Voucher runs live, every other template opens a guided walk-through (no on-chain run).
-- Unverified: resuming a wallet pairing after reload needs a real wallet (the relay is blocked in the sandbox). If a reload shows "Reconnecting" then the connect prompt, the wallet did not re-announce; check the browser console.
+## 5. Things we chose NOT to do (and why)
 
-## Hosted deployment (Postgres)
+- **No invites for Revenue Split, Block Points, or Badgers' own staking yet.** They need the importing wallet's own coin and signature. Whether an XO wallet adds the missing coin on import cannot be tested here, so nothing is presented as working. Only a pre-filled chipnet import in the Blaze Tool can answer that.
+- No audit **failure** for bad resource links (warning only).
+- No whole-file overwrites of `TemplateDetail.tsx`, `api.ts`, `describe.ts`, `seed.ts`, `index.ts`, `cli.ts` and the other existing files; apply scripts only.
+- No Claude attribution lines in commits.
+- No claim that any wallet flow is verified: signing prompt, connect, reload-restore, Demo and the Blaze Tool import were never run against a real wallet.
+- No Postgres run of the new tests (`npm run test:postgres` needs a scratch DB).
+- Did not verify the drag cursor shape or live mainnet/Render behaviour; Batch C was tested against a mocked Electrum server only.
+- The one-click connect item: the dump already showed the QR on the first click, so no behaviour change was needed beyond hardening. If the live site still needs two clicks, it is running an older build.
 
-The server now supports PostgreSQL. With `DATABASE_URL` set (Supabase Session pooler string) all data lives there; without
-it the server uses SQLite exactly as before. The whole test suite passes on both (`npm test`, and
-`TEST_DATABASE_URL=... npm run test:postgres`). `/api/health` now touches the database so an uptime pinger keeps a free
-host and a free database awake. The hosting plan and Miguel's setup steps are in `docs/DEPLOY.md`.
+## 6. Still to do
+
+1. **Batch D (review tracking):** write the decision record for the judges (hybrid above), then, only if time allows, "review by broadcasting an XO invite" so a reviewer needs no WizardConnect wallet.
+2. **Invites for Revenue Split (fund and payout), Block Points (claim) and Badgers staking**, each labelled honestly as "verified up to this point".
+3. **Real-wallet checks:** signing prompt, connect, reload-restore, Demo voucher issue, Blaze Tool import of a Drip Mine, Token Burner and Badgers invitation.
+4. `VITE_SLIDES_URL` is unset (the banner says "Slides: link coming soon").
+5. Two mainnet voucher transactions were unconfirmed on Blockchair when last checked.
+6. Postgres test run of the new tests; check Render redeploy shows the five templates and the new "Resource links" audit row.
+
+## 7. Deployment and delivery method (how we ship every change)
+
+Render redeploys by itself on push to `main`; the invitation tool redeploys on Vercel.
+
+1. **Checkpoint 1, sync:** `cd ~/XOGrid && git stash -u && git pull origin main && git log --oneline -3`
+2. **Checkpoint 2, new files:** `cp` each file from `~/Downloads` to its destination path (a table is given with every delivery; `mkdir -p` first when needed).
+3. **Checkpoint 3, edit existing files:** `python3 ~/Downloads/apply_<batch>.py` (exact-string replacements). It writes **nothing** if any edit cannot be found and says which file and edit; it skips edits already applied, so running twice is safe. If it stops, the user pastes its message. It tolerates differing blank lines at the end of a file (a past failure: files in the dump ended with three newlines, the real ones with one). After applying, regenerate the template copy: `cd server && node scripts/sync-community-templates.mjs`.
+4. **Checkpoint 4, checks:** `cd server && npx tsc --noEmit -p . && npm test`; `cd frontend && npx tsc --noEmit -p . && npm run build`; `cd templates && npm install --legacy-peer-deps && npm run typecheck && npm test` (templates has its own `node_modules`; `tsc: not found` means it was never installed).
+5. **Checkpoint 5, run and click through:** server with `ADMIN_IDENTITIES="angelnath=<pubkey hex>,miguel=<bchtest address>,john=<bitcoincash address>" npm run dev` (startup should print `Moderators on the allowlist from ADMIN_IDENTITIES: angelnath, miguel, john`; if admin sign-in fails the terminal prints `admin login rejected` with the exact reason), `cd frontend && npm run dev`, and `cd templates && npm run web` for the invitation tool.
+6. **Checkpoint 6, review before pushing:** `git add -A frontend server docs templates && git status -sb`. There must be no `.db`, `node_modules` or `.xo-demo` files.
+7. **Commit and push (no Claude attribution):** `git commit -m "<message>" && git pull origin main --no-rebase && git push origin main`.
+
+## 8. Sandbox notes (for the assistant)
+
+- The dump is split on lines `===== FILE: <path> =====` (regex `^===== FILE: (.+?) =====\n`). Rebuild the repo from it to type-check and test.
+- `npm install` fails in the sandbox for `server/` (`Cannot read properties of null (reading 'edgesOut')`): use `yarn install --ignore-engines`, then build better-sqlite3 with `npx node-gyp rebuild --release --nodedir=/usr`. Frontend and templates install with `--legacy-peer-deps`.
+- The dump has no binaries: add a placeholder `frontend/src/assets/images/xogridlogo.png` (and one under `templates/web/src/assets/`) in the sandbox only, never in a delivery. One logo-identity test in `templates/web` fails in the sandbox for that reason.
+- Servers started from a shell call die between calls: start with `setsid nohup ... &` and use the same command to test. `pkill -f` can match its own shell.
+- The sandbox cannot reach the WizardConnect relay or live Electrum; mock Electrum with Playwright `route_web_socket`.
+
+## 9. Files delivered in this conversation (all pushed except as noted)
+
+Batch A+B: `templateView.ts`, `signing.ts` (`frontend/src/hub/`); `SigningPrompt.tsx` (`frontend/src/components/`); `TemplateContents.tsx`, `TemplateResources.tsx`, `TemplateExport.tsx` (`frontend/src/components/hub/`); `community.ts` (`server/src/templates/`); `sync-community-templates.mjs` (`server/scripts/`); tests `community-templates.test.ts`, `describe-readable.test.ts`, `resource-links-check.test.ts` (`server/test/`); `apply_batch_ab.py`.
+Batch C: `inviteTool.ts` (`frontend/src/config/`); `badgers-stake.ts` (`templates/web/src/lib/`); `BadgerReleasePanel.tsx` (`templates/web/src/components/`); `badgers-release-invitation.test.ts` (`templates/web/test/`); `apply_batch_c.py`.
+Tools: `dump_xogrid.sh` (run from anywhere; writes `~/Desktop/xogrid-dump.txt`).
