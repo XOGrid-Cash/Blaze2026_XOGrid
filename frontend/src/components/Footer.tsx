@@ -26,7 +26,7 @@ function Footer() {
     Platform: [
       { name: "Home", href: "/" },
       { name: "How It Works", href: "/#how-it-works" },
-      { name: "Publish Template", href: "/publish" },
+      { name: "Build Template", href: "/publish" },
     ],
     Resources: [
       { name: "Policy", href: "/policy" },

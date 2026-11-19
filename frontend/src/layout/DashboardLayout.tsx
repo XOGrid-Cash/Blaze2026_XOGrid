@@ -42,7 +42,7 @@ const navigation: NavigationItem[] = [
     icon: Compass,
   },
   {
-    label: "Publish template",
+    label: "Build template",
     to: "/publish",
     icon: Upload,
   },
@@ -170,18 +170,7 @@ export default function DashboardLayout() {
                   >
                     <Icon size={18} />
                     <span>{item.label}</span>
-                  </NavLink>
-
-                  {/* Build Template - no navigation for now */}
-                  {item.to === "/publish" && (
-                    <button
-                      type="button"
-                      className="flex w-full cursor-default items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left text-sm font-medium text-white transition-all"
-                    >
-                      <Blocks size={18} />
-                      <span>Build Template</span>
-                    </button>
-                  )}
+                  </NavLink>           
                 </div>
               );
             })}

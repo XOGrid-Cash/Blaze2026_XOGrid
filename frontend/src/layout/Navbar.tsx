@@ -53,7 +53,7 @@ function Navbar() {
       href: "/demo",
     },
     {
-      name: "Publish",
+      name: "Build Template",
       href: "/publish",
     },
     {
