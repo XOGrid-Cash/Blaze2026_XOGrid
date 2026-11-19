@@ -96,7 +96,7 @@ export function TemplateContents({ view }: { view: TemplateView }) {
       </p>
 
       <div className="mt-5 space-y-3">
-        <Block title="Actions" count={view.actions.length} open>
+        <Block title="Actions" count={view.actions.length}>
           <ul className="space-y-5">
             {view.actions.map((action) => (
               <Named
