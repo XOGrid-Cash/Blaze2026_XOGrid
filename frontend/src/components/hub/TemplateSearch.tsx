@@ -2,6 +2,7 @@ import { Fragment, useEffect, useId, useMemo, useRef, useState, type KeyboardEve
 import { ChevronRight, Search, X } from "lucide-react";
 
 import { anchorId, jumpTo, KIND_LABEL, KIND_ORDER, searchRefs, useRefs, type RefTarget, type SearchResult } from "../../hub/templateRefs";
+import { FOCUS_SEARCH_EVENT } from "../../hub/templateShortcuts";
 
 const PER_GROUP = 8;
 
@@ -30,13 +31,10 @@ function snippet(description: string, query: string): string {
   return `${start > 0 ? "…" : ""}${description.slice(start, start + 110)}${start + 110 < description.length ? "…" : ""}`;
 }
 
-function isTyping(element: Element | null): boolean {
-  return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || (element instanceof HTMLElement && element.isContentEditable);
-}
 
 /**
  * Finds a part of the template by id, name or description. Results are grouped by kind; choosing one jumps to it.
- * Each result can be expanded to list the parts that use it. Press "/" anywhere on the page to search.
+ * Each result can be expanded to list the parts that use it. The "/" shortcut focuses it.
  */
 export function TemplateSearch() {
   const refs = useRefs();
@@ -61,17 +59,14 @@ export function TemplateSearch() {
   const flat = useMemo(() => groups.flatMap((group) => group.shown), [groups]);
   const optionId = (index: number) => `${listId}-option-${index}`;
 
-  // "/" focuses the search from anywhere on the page, unless the reader is typing somewhere else.
+  // The "/" shortcut (in hub/templateShortcuts.ts) asks for the search to be focused.
   useEffect(() => {
-    const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !isTyping(document.activeElement)) {
-        event.preventDefault();
-        input.current?.focus();
-        setOpen(true);
-      }
+    const onFocus = () => {
+      input.current?.focus();
+      setOpen(true);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(FOCUS_SEARCH_EVENT, onFocus);
+    return () => window.removeEventListener(FOCUS_SEARCH_EVENT, onFocus);
   }, []);
 
   // Close the results when the reader clicks elsewhere.

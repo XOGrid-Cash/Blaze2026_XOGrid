@@ -7,6 +7,8 @@ import { InlineCode, ScriptCode } from "./ScriptCode";
 import { anchorId, buildRefIndex, RefContext, sizeLabel, useRefNavigation, useRefs, type RefKind } from "../../hub/templateRefs";
 import { BackChip, RefLink } from "./RefLink";
 import { TemplateSearch } from "./TemplateSearch";
+import { ShortcutsHelp } from "./ShortcutsHelp";
+import { SECTION_KINDS, sectionId } from "../../hub/templateShortcuts";
 
 const card = "rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#121522] to-[#0a0c13] p-6 sm:p-7 2xl:p-9";
 const heading = "text-xs font-semibold uppercase tracking-[.16em] text-slate-500";
@@ -15,13 +17,13 @@ const code = "rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-xs text-sl
 const target = "scroll-mt-24 rounded-lg";
 
 /** One collapsible block. Uses the browser's own details element, so it works with the keyboard and without scripts. */
-function Block({ title, count, open, children }: { title: string; count: number; open?: boolean; children: ReactNode }) {
+function Block({ kind, title, count, open, children }: { kind: RefKind; title: string; count: number; open?: boolean; children: ReactNode }) {
   if (count === 0) {
     return null;
   }
 
   return (
-    <details open={open} className="group rounded-2xl border border-white/[0.06] bg-black/20">
+    <details id={sectionId(kind)} open={open} className="group scroll-mt-24 rounded-2xl border border-white/[0.06] bg-black/20">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 2xl:p-5 [&::-webkit-details-marker]:hidden">
         <span className="text-sm font-semibold text-white">
           {title} <span className="ml-1 font-normal text-slate-500">({count})</span>
@@ -196,6 +198,17 @@ export function TemplateContents({ view }: { view: TemplateView }) {
   const { backLabel, dismissBack } = useRefNavigation(refs);
   const inputs = useMemo(() => new Map(view.inputs.map((item) => [item.id, item])), [view]);
   const outputs = useMemo(() => new Map(view.outputs.map((item) => [item.id, item])), [view]);
+  const sections = useMemo(() => {
+    const counts: Record<RefKind, number> = {
+      action: view.actions.length,
+      transaction: view.transactions.length,
+      lockingScript: view.lockingScripts.length,
+      script: view.scripts.length,
+      constant: view.constants.length,
+      variable: view.variables.length,
+    };
+    return SECTION_KINDS.filter((kind) => counts[kind] > 0);
+  }, [view]);
 
   const total =
     view.actions.length +
@@ -211,8 +224,11 @@ export function TemplateContents({ view }: { view: TemplateView }) {
 
   return (
     <RefContext value={refs}>
-      <section className={card}>
-        <p className={heading}>Template contents</p>
+      <section className={card} data-template-contents>
+        <div className="flex items-center justify-between gap-3">
+          <p className={heading}>Template contents</p>
+          <ShortcutsHelp sections={sections} />
+        </div>
         <p className="mt-3 text-sm text-slate-400">
           Everything below comes from the template file itself. The scripts are the rules the coins follow, so read them
           before you use a template with real money. Underlined names link to where they are defined.
@@ -221,7 +237,7 @@ export function TemplateContents({ view }: { view: TemplateView }) {
         <TemplateSearch />
 
         <div className="mt-4 space-y-3">
-          <Block title="Actions" count={view.actions.length}>
+          <Block kind="action" title="Actions" count={view.actions.length}>
             <ul className="space-y-5">
               {view.actions.map((action) => (
                 <Named
@@ -261,7 +277,7 @@ export function TemplateContents({ view }: { view: TemplateView }) {
             </ul>
           </Block>
 
-          <Block title="Transactions" count={view.transactions.length}>
+          <Block kind="transaction" title="Transactions" count={view.transactions.length}>
             <ul className="space-y-5">
               {view.transactions.map((transaction) => (
                 <Named
@@ -291,19 +307,19 @@ export function TemplateContents({ view }: { view: TemplateView }) {
             </ul>
           </Block>
 
-          <Block title="Locking scripts" count={view.lockingScripts.length}>
+          <Block kind="lockingScript" title="Locking scripts" count={view.lockingScripts.length}>
             <Parts kind="lockingScript" items={view.lockingScripts} />
           </Block>
 
-          <Block title="Scripts (CashAssembly)" count={view.scripts.length}>
+          <Block kind="script" title="Scripts (CashAssembly)" count={view.scripts.length}>
             <ScriptList view={view} />
           </Block>
 
-          <Block title="Constants" count={view.constants.length}>
+          <Block kind="constant" title="Constants" count={view.constants.length}>
             <Values kind="constant" items={view.constants} />
           </Block>
 
-          <Block title="Variables" count={view.variables.length}>
+          <Block kind="variable" title="Variables" count={view.variables.length}>
             <Values kind="variable" items={view.variables} />
           </Block>
         </div>

@@ -222,7 +222,8 @@ export function revealAnchor(anchor: string, smooth = true): boolean {
     return false;
   }
 
-  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+  // The element itself when it is a section, and every section around it.
+  for (let parent: HTMLElement | null = element; parent; parent = parent.parentElement) {
     if (parent instanceof HTMLDetailsElement) {
       parent.open = true;
     }
@@ -288,9 +289,14 @@ export function useRefNavigation(content: unknown): { backLabel: string | null; 
 
 const JUMP_EVENT = "xogrid:ref-jump";
 
+/** Whether the current history entry was made by an in-page jump, so going back stays on this page. */
+export function cameFromJump(): boolean {
+  return Boolean((window.history.state as { xogridJump?: boolean } | null)?.xogridJump);
+}
+
 export function jumpTo(anchor: string, from: Element | null) {
   if (window.location.hash !== `#${anchor}`) {
-    window.history.pushState(window.history.state, "", `#${anchor}`);
+    window.history.pushState({ ...(window.history.state ?? {}), xogridJump: true }, "", `#${anchor}`);
   }
 
   revealAnchor(anchor);
