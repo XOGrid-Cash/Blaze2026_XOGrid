@@ -1,15 +1,23 @@
 import { Fragment, type ReactNode } from "react";
 
-import { isFlowControl, layout, type Token } from "../../hub/cashAssembly";
+import { isFlowControl, layout, tokenize, type Token } from "../../hub/cashAssembly";
+import { useRefs } from "../../hub/templateRefs";
+import { RefLink } from "./RefLink";
 
-export interface ScriptNames {
-  /** Script ids in this template, which become links to that script. */
-  scripts: Set<string>;
-  /** Variable id to its readable name, shown on hover. */
-  variables: Map<string, string>;
+const REF_COLOUR = { script: "text-violet-300", constant: "text-cyan-300", variable: "text-fuchsia-300" } as const;
+
+function NameView({ text }: { text: string }) {
+  const target = useRefs()?.resolveCode(text);
+  const colour = target && target.kind in REF_COLOUR ? REF_COLOUR[target.kind as keyof typeof REF_COLOUR] : "text-fuchsia-300";
+
+  return (
+    <RefLink target={target} className={colour}>
+      {text}
+    </RefLink>
+  );
 }
 
-function TokenView({ token, names }: { token: Token; names: ScriptNames }): ReactNode {
+function TokenView({ token }: { token: Token }): ReactNode {
   switch (token.kind) {
     case "op":
       if (isFlowControl(token.text)) {
@@ -29,41 +37,39 @@ function TokenView({ token, names }: { token: Token; names: ScriptNames }): Reac
     case "comment":
       return <span className="italic text-slate-500">{token.text}</span>;
     case "ref":
-      if (names.scripts.has(token.text)) {
-        return (
-          <a href={`#script-${token.text}`} className="text-violet-300 underline decoration-violet-400/40 underline-offset-2 hover:text-violet-200" title="Another script in this template">
-            {token.text}
-          </a>
-        );
-      }
-      return (
-        <span className="text-fuchsia-300" title={names.variables.get(token.text.split(".")[0]) ?? "Filled in when the transaction is built"}>
-          {token.text}
-        </span>
-      );
+      return <NameView text={token.text} />;
     case "push":
     case "eval":
       return (
         <span>
           <span className="text-slate-500">{token.kind === "push" ? "<" : "$("}</span>
-          <Tokens tokens={token.children} names={names} />
+          <Tokens tokens={token.children} />
           <span className="text-slate-500">{token.kind === "push" ? ">" : ")"}</span>
         </span>
       );
   }
 }
 
-function Tokens({ tokens, names }: { tokens: Token[]; names: ScriptNames }) {
+function Tokens({ tokens }: { tokens: Token[] }) {
   return tokens.map((token, index) => (
     <Fragment key={index}>
       {index > 0 && " "}
-      <TokenView token={token} names={names} />
+      <TokenView token={token} />
     </Fragment>
   ));
 }
 
+/** A short CashAssembly expression on one line, for amounts and script names. */
+export function InlineCode({ text }: { text: string }) {
+  return (
+    <span className="break-words font-mono text-xs text-slate-300">
+      <Tokens tokens={tokenize(text)} />
+    </span>
+  );
+}
+
 /** A CashAssembly script, laid out one statement per line with OP_IF branches indented and parts coloured by kind. */
-export function ScriptCode({ tokens, names }: { tokens: Token[]; names: ScriptNames }) {
+export function ScriptCode({ tokens }: { tokens: Token[] }) {
   const lines = layout(tokens);
   const gutter = String(lines.length).length;
 
@@ -75,7 +81,7 @@ export function ScriptCode({ tokens, names }: { tokens: Token[]; names: ScriptNa
             {index + 1}
           </span>
           <span className="min-w-0 whitespace-pre-wrap break-words pr-3" style={{ paddingLeft: `${line.indent * 2}ch` }}>
-            <Tokens tokens={line.tokens} names={names} />
+            <Tokens tokens={line.tokens} />
           </span>
         </div>
       ))}

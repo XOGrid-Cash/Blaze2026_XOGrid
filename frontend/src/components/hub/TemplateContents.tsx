@@ -1,13 +1,17 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 
-import { measure, tokenize, type Size } from "../../hub/cashAssembly";
-import type { NamedItem, PartView, TemplateView, ValueView } from "../../hub/templateView";
-import { ScriptCode, type ScriptNames } from "./ScriptCode";
+import { tokenize } from "../../hub/cashAssembly";
+import type { NamedItem, PartFact, PartView, TemplateView, ValueView } from "../../hub/templateView";
+import { InlineCode, ScriptCode } from "./ScriptCode";
+import { anchorId, buildRefIndex, RefContext, sizeLabel, useRefNavigation, useRefs, type RefKind } from "../../hub/templateRefs";
+import { BackChip, RefLink } from "./RefLink";
 
 const card = "rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#121522] to-[#0a0c13] p-6 sm:p-7 2xl:p-9";
 const heading = "text-xs font-semibold uppercase tracking-[.16em] text-slate-500";
 const code = "rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-xs text-slate-200";
+/** Room around a jump target so the highlight ring is not clipped, and space above it when scrolled to the top. */
+const target = "scroll-mt-24 rounded-lg";
 
 /** One collapsible block. Uses the browser's own details element, so it works with the keyboard and without scripts. */
 function Block({ title, count, open, children }: { title: string; count: number; open?: boolean; children: ReactNode }) {
@@ -28,9 +32,9 @@ function Block({ title, count, open, children }: { title: string; count: number;
   );
 }
 
-function Named({ item, extra }: { item: NamedItem; extra?: ReactNode }) {
+function Named({ kind, item, extra }: { kind: RefKind; item: NamedItem; extra?: ReactNode }) {
   return (
-    <li className="space-y-1">
+    <li id={anchorId(kind, item.id)} data-ref-label={item.name} className={`space-y-1 ${target}`}>
       <p className="text-sm font-semibold text-white">
         {item.name} <span className={`${code} ml-1 align-middle`}>{item.id}</span>
       </p>
@@ -40,22 +44,51 @@ function Named({ item, extra }: { item: NamedItem; extra?: ReactNode }) {
   );
 }
 
-function Parts({ items }: { items: PartView[] }) {
+/** A labelled fact about an input, output or locking script, with its script or locking script as a link. */
+function Fact({ fact }: { fact: PartFact }) {
+  const refs = useRefs();
+  let value: ReactNode;
+
+  if (fact.plain) {
+    value = <span className="font-mono text-xs text-slate-300">{fact.code}</span>;
+  } else if (fact.refers === "expression") {
+    value = <InlineCode text={fact.code} />;
+  } else {
+    value = (
+      <RefLink target={refs?.get(fact.refers, fact.code)} className="font-mono text-xs text-violet-300">
+        {fact.code}
+      </RefLink>
+    );
+  }
+
+  return (
+    <span className="block text-xs text-slate-500">
+      {fact.label}: {value}
+    </span>
+  );
+}
+
+function Facts({ facts }: { facts: PartFact[] }) {
+  return facts.map((fact) => <Fact key={fact.label} fact={fact} />);
+}
+
+function Parts({ kind, items }: { kind: RefKind; items: PartView[] }) {
   return (
     <ul className="space-y-4">
       {items.map((item) => (
-        <Named key={item.id} item={item} extra={item.detail && <p className="font-mono text-xs text-slate-500">{item.detail}</p>} />
+        <Named key={item.id} kind={kind} item={item} extra={item.facts.length > 0 && <div className="space-y-0.5">{<Facts facts={item.facts} />}</div>} />
       ))}
     </ul>
   );
 }
 
-function Values({ items }: { items: ValueView[] }) {
+function Values({ kind, items }: { kind: RefKind; items: ValueView[] }) {
   return (
     <ul className="space-y-4">
       {items.map((item) => (
         <Named
           key={item.id}
+          kind={kind}
           item={item}
           extra={
             (item.type || item.value) && (
@@ -72,42 +105,26 @@ function Values({ items }: { items: ValueView[] }) {
   );
 }
 
-function sizeLabel({ bytes, unknown }: Size): { label: string; title: string } {
-  const unit = bytes === 1 ? "byte" : "bytes";
-  const names = [...new Set(unknown)];
-
-  if (names.length === 0) {
-    return { label: `${bytes.toLocaleString()} ${unit}`, title: "Compiled size of this script" };
-  }
-
-  return {
-    label: `${bytes.toLocaleString()} ${unit} + ${names.length} ${names.length === 1 ? "value" : "values"}`,
-    title: `${bytes.toLocaleString()} ${unit} of fixed code, plus the size of: ${names.join(", ")} (filled in when the transaction is built)`,
-  };
-}
-
 function ScriptList({ view }: { view: TemplateView }) {
-  const sources = Object.fromEntries(view.scripts.map((script) => [script.id, script.text]));
-  const names: ScriptNames = {
-    scripts: new Set(view.scripts.map((script) => script.id)),
-    variables: new Map(view.variables.map((variable) => [variable.id, variable.name])),
-  };
+  const refs = useRefs();
 
   return (
     <ul className="space-y-5">
       {view.scripts.map((script) => {
-        const tokens = tokenize(script.text);
-        const size = sizeLabel(measure(tokens, sources, new Set([script.id])));
+        const size = refs?.scriptSize(script.id);
+        const label = size && sizeLabel(size);
 
         return (
-          <li key={script.id} id={`script-${script.id}`} className="scroll-mt-24">
+          <li key={script.id} id={anchorId("script", script.id)} data-ref-label={script.id} className={target}>
             <p className="flex items-center justify-between gap-3 text-sm font-semibold text-white">
               <span className={code}>{script.id}</span>
-              <span className="cursor-help text-xs font-normal text-slate-500" title={size.title}>
-                {size.label}
-              </span>
+              {label && (
+                <span className="cursor-help text-xs font-normal text-slate-500" title={label.title}>
+                  {label.label}
+                </span>
+              )}
             </p>
-            <ScriptCode tokens={tokens} names={names} />
+            <ScriptCode tokens={tokenize(script.text)} />
           </li>
         );
       })}
@@ -115,11 +132,26 @@ function ScriptList({ view }: { view: TemplateView }) {
   );
 }
 
+function PartLine({ index, id, part }: { index: number; id: string; part: PartView | undefined }) {
+  return (
+    <div className="mt-1 text-xs text-slate-300">
+      {index}. {part?.name ?? id}
+      {part && <Facts facts={part.facts} />}
+    </div>
+  );
+}
+
 /**
  * What the template actually contains, for someone deciding whether to trust it: the actions people can take, the
- * transactions they build, and the scripts that decide what the coins can do.
+ * transactions they build, and the scripts that decide what the coins can do. Names that point at another part of
+ * the template are links to it.
  */
 export function TemplateContents({ view }: { view: TemplateView }) {
+  const refs = useMemo(() => buildRefIndex(view), [view]);
+  const { backLabel, dismissBack } = useRefNavigation(refs);
+  const inputs = useMemo(() => new Map(view.inputs.map((item) => [item.id, item])), [view]);
+  const outputs = useMemo(() => new Map(view.outputs.map((item) => [item.id, item])), [view]);
+
   const total =
     view.actions.length +
     view.transactions.length +
@@ -133,59 +165,61 @@ export function TemplateContents({ view }: { view: TemplateView }) {
   }
 
   return (
-    <section className={card}>
-      <p className={heading}>Template contents</p>
-      <p className="mt-3 text-sm text-slate-400">
-        Everything below comes from the template file itself. The scripts are the rules the coins follow, so read them
-        before you use a template with real money.
-      </p>
+    <RefContext value={refs}>
+      <section className={card}>
+        <p className={heading}>Template contents</p>
+        <p className="mt-3 text-sm text-slate-400">
+          Everything below comes from the template file itself. The scripts are the rules the coins follow, so read them
+          before you use a template with real money. Underlined names link to where they are defined.
+        </p>
 
-      <div className="mt-5 space-y-3">
-        <Block title="Actions" count={view.actions.length}>
-          <ul className="space-y-5">
-            {view.actions.map((action) => (
-              <Named
-                key={action.id}
-                item={action}
-                extra={
-                  <div className="space-y-2 pt-1">
-                    {action.transaction && (
-                      <p className="text-xs text-slate-500">
-                        Builds transaction <span className={code}>{action.transaction}</span>
-                      </p>
-                    )}
-                    {action.roles.map((role) => (
-                      <div key={role.id} className="border-l-2 border-violet-400/30 pl-3">
-                        <p className="text-xs font-semibold text-slate-200">{role.name}</p>
-                        {role.description && <p className="text-xs leading-5 text-slate-400">{role.description}</p>}
-                        {role.variables.length > 0 && (
-                          <p className="mt-1 text-xs text-slate-500">
-                            Provides:{" "}
-                            {role.variables.map((variable) => (
-                              <span key={variable} className={`${code} mr-1 inline-block`}>
-                                {variable}
-                              </span>
-                            ))}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                }
-              />
-            ))}
-          </ul>
-        </Block>
+        <div className="mt-5 space-y-3">
+          <Block title="Actions" count={view.actions.length}>
+            <ul className="space-y-5">
+              {view.actions.map((action) => (
+                <Named
+                  key={action.id}
+                  kind="action"
+                  item={action}
+                  extra={
+                    <div className="space-y-2 pt-1">
+                      {action.transaction && (
+                        <p className="text-xs text-slate-500">
+                          Builds transaction{" "}
+                          <RefLink target={refs.get("transaction", action.transaction)} className={code}>
+                            {action.transaction}
+                          </RefLink>
+                        </p>
+                      )}
+                      {action.roles.map((role) => (
+                        <div key={role.id} className="border-l-2 border-violet-400/30 pl-3">
+                          <p className="text-xs font-semibold text-slate-200">{role.name}</p>
+                          {role.description && <p className="text-xs leading-5 text-slate-400">{role.description}</p>}
+                          {role.variables.length > 0 && (
+                            <p className="mt-1 text-xs text-slate-500">
+                              Provides:{" "}
+                              {role.variables.map((variable) => (
+                                <RefLink key={variable} target={refs.get("variable", variable)} className={`${code} mr-1 inline-block`}>
+                                  {variable}
+                                </RefLink>
+                              ))}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  }
+                />
+              ))}
+            </ul>
+          </Block>
 
-        <Block title="Transactions" count={view.transactions.length}>
-          <ul className="space-y-5">
-            {view.transactions.map((transaction) => {
-              const inputs = new Map(view.inputs.map((item) => [item.id, item]));
-              const outputs = new Map(view.outputs.map((item) => [item.id, item]));
-
-              return (
+          <Block title="Transactions" count={view.transactions.length}>
+            <ul className="space-y-5">
+              {view.transactions.map((transaction) => (
                 <Named
                   key={transaction.id}
+                  kind="transaction"
                   item={transaction}
                   extra={
                     <div className="grid gap-3 pt-1 sm:grid-cols-2">
@@ -193,46 +227,41 @@ export function TemplateContents({ view }: { view: TemplateView }) {
                         <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Spends</p>
                         {transaction.inputs.length === 0 && <p className="text-xs text-slate-500">Nothing from the contract.</p>}
                         {transaction.inputs.map((id, index) => (
-                          <p key={`${id}-${index}`} className="mt-1 text-xs text-slate-300">
-                            {index}. {inputs.get(id)?.name ?? id}
-                            {inputs.get(id)?.detail && <span className="block font-mono text-slate-500">{inputs.get(id)?.detail}</span>}
-                          </p>
+                          <PartLine key={`${id}-${index}`} index={index} id={id} part={inputs.get(id)} />
                         ))}
                       </div>
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Creates</p>
                         {transaction.outputs.length === 0 && <p className="text-xs text-slate-500">No outputs.</p>}
                         {transaction.outputs.map((id, index) => (
-                          <p key={`${id}-${index}`} className="mt-1 text-xs text-slate-300">
-                            {index}. {outputs.get(id)?.name ?? id}
-                            {outputs.get(id)?.detail && <span className="block font-mono text-slate-500">{outputs.get(id)?.detail}</span>}
-                          </p>
+                          <PartLine key={`${id}-${index}`} index={index} id={id} part={outputs.get(id)} />
                         ))}
                       </div>
                     </div>
                   }
                 />
-              );
-            })}
-          </ul>
-        </Block>
+              ))}
+            </ul>
+          </Block>
 
-        <Block title="Locking scripts" count={view.lockingScripts.length}>
-          <Parts items={view.lockingScripts} />
-        </Block>
+          <Block title="Locking scripts" count={view.lockingScripts.length}>
+            <Parts kind="lockingScript" items={view.lockingScripts} />
+          </Block>
 
-        <Block title="Scripts (CashAssembly)" count={view.scripts.length}>
-          <ScriptList view={view} />
-        </Block>
+          <Block title="Scripts (CashAssembly)" count={view.scripts.length}>
+            <ScriptList view={view} />
+          </Block>
 
-        <Block title="Constants" count={view.constants.length}>
-          <Values items={view.constants} />
-        </Block>
+          <Block title="Constants" count={view.constants.length}>
+            <Values kind="constant" items={view.constants} />
+          </Block>
 
-        <Block title="Variables" count={view.variables.length}>
-          <Values items={view.variables} />
-        </Block>
-      </div>
-    </section>
+          <Block title="Variables" count={view.variables.length}>
+            <Values kind="variable" items={view.variables} />
+          </Block>
+        </div>
+      </section>
+      <BackChip label={backLabel} onDismiss={dismissBack} />
+    </RefContext>
   );
 }

@@ -29,8 +29,18 @@ export interface TransactionView extends NamedItem {
   outputs: string[];
 }
 
+/** One labelled fact about an input, output or locking script. `code` is CashAssembly, so it can link to scripts and variables. */
+export interface PartFact {
+  label: string;
+  code: string;
+  /** What the code names: an expression, or the id of a script or locking script. */
+  refers: "expression" | "script" | "lockingScript";
+  /** Plain text instead of code, for values like the locking type. */
+  plain?: boolean;
+}
+
 export interface PartView extends NamedItem {
-  detail: string | null;
+  facts: PartFact[];
 }
 
 export interface ScriptView {
@@ -193,8 +203,17 @@ function refsOf(value: unknown, key: "input" | "output"): string[] {
     .slice(0, MAX_ITEMS);
 }
 
-function partsOf(value: unknown, variablesById: Dict, detailOf: (item: Dict) => string | null): PartView[] {
-  return entries(value).map(([id, item]) => ({ ...named(id, item, variablesById), detail: detailOf(item) }));
+function partsOf(value: unknown, variablesById: Dict, factsOf: (item: Dict) => (PartFact | null)[]): PartView[] {
+  return entries(value).map(([id, item]) => ({
+    ...named(id, item, variablesById),
+    facts: factsOf(item).filter((fact): fact is PartFact => fact !== null && fact.code.length > 0),
+  }));
+}
+
+function amountFact(item: Dict): PartFact | null {
+  const satoshis = plainValue(item.valueSatoshis);
+
+  return satoshis ? { label: "Amount (sats)", code: satoshis.slice(0, MAX_TEXT), refers: "expression" } : null;
 }
 
 function valuesOf(value: unknown, variablesById: Dict): ValueView[] {
@@ -223,24 +242,18 @@ export function viewTemplate(template: unknown): TemplateView {
       inputs: refsOf(item.inputs, "input"),
       outputs: refsOf(item.outputs, "output"),
     })),
-    inputs: partsOf(source.inputs, variablesById, (item) => {
-      const script = text(item.unlockingScript, MAX_NAME);
-      const satoshis = plainValue(item.valueSatoshis);
-
-      return [satoshis ? `${satoshis} sats` : "", script ? `unlocks with ${script}` : ""].filter(Boolean).join(" · ") || null;
-    }),
-    outputs: partsOf(source.outputs, variablesById, (item) => {
-      const script = text(item.lockingScript, MAX_NAME);
-      const satoshis = plainValue(item.valueSatoshis);
-
-      return [satoshis ? `${satoshis} sats` : "", script ? `locked by ${script}` : ""].filter(Boolean).join(" · ") || null;
-    }),
-    lockingScripts: partsOf(source.lockingScripts, variablesById, (item) => {
-      const type = text(item.lockingType, 40);
-      const bytecode = text(item.lockingBytecode, MAX_NAME);
-
-      return [type, bytecode ? `script ${bytecode}` : ""].filter(Boolean).join(" · ") || null;
-    }),
+    inputs: partsOf(source.inputs, variablesById, (item) => [
+      amountFact(item),
+      { label: "Unlocked by", code: text(item.unlockingScript, MAX_NAME), refers: "script" },
+    ]),
+    outputs: partsOf(source.outputs, variablesById, (item) => [
+      amountFact(item),
+      { label: "Locked by", code: text(item.lockingScript, MAX_NAME), refers: "lockingScript" },
+    ]),
+    lockingScripts: partsOf(source.lockingScripts, variablesById, (item) => [
+      { label: "Type", code: text(item.lockingType, 40), refers: "expression", plain: true },
+      { label: "Script", code: text(item.lockingBytecode, MAX_NAME), refers: "script" },
+    ]),
     scripts,
     constants: valuesOf(source.constants, variablesById),
     variables: valuesOf(source.variables, variablesById),
