@@ -83,11 +83,19 @@ export function TemplateSearch() {
     return null;
   }
 
-  const go = (target: RefTarget) => {
+  /**
+   * Jumps to a result and closes the list. From the keyboard, focus stays in the search box (which stays in view
+   * while the contents scroll) so the reader can type a new search. From a click or tap, focus is not put back: that
+   * would reopen the list and, on a phone, bring up the on-screen keyboard over what the reader jumped to.
+   */
+  const go = (target: RefTarget, from: "keyboard" | "pointer") => {
     setOpen(false);
     jumpTo(anchorId(target.kind, target.id), box.current);
-    // The search bar stays in view while the contents scroll, so the reader can carry on typing.
-    input.current?.focus({ preventScroll: true });
+    if (from === "keyboard") {
+      input.current?.focus({ preventScroll: true });
+    } else {
+      input.current?.blur();
+    }
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -99,7 +107,7 @@ export function TemplateSearch() {
       }
     } else if (event.key === "Enter" && open && flat[active]) {
       event.preventDefault();
-      go(flat[active].target);
+      go(flat[active].target, "keyboard");
     } else if (event.key === "Escape") {
       if (query) setQuery("");
       else input.current?.blur();
@@ -124,7 +132,7 @@ export function TemplateSearch() {
             role="option"
             aria-selected={index === active}
             onPointerMove={() => setActive(index)}
-            onClick={() => go(target)}
+            onClick={() => go(target, "pointer")}
             className="min-w-0 flex-1 cursor-pointer px-3 py-2"
           >
             <p className="truncate text-sm text-white">
@@ -162,7 +170,7 @@ export function TemplateSearch() {
               <li key={`${usage.kind}:${usage.id}`}>
                 <button
                   type="button"
-                  onClick={() => go(usage)}
+                  onClick={() => go(usage, "pointer")}
                   className="flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left text-xs! text-slate-300 hover:bg-white/[0.05] hover:text-white"
                 >
                   <span className="shrink-0 text-[10px] uppercase tracking-wider text-slate-500">{KIND_LABEL[usage.kind]}</span>
