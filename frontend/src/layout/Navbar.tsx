@@ -369,7 +369,7 @@ function Navbar() {
                 size={16}
                 className="shrink-0 text-orange-400"
               />
-              <span>Back to Dashboard</span>
+              <span>Go to Dashboard</span>
             </Link>
 
             <button
@@ -411,8 +411,8 @@ function Navbar() {
             {/* Dashboard Link - Always Visible */}
             <Link
               to="/dashboard"
-              aria-label="Back to Dashboard"
-              title="Back to Dashboard"
+              aria-label="Go to Dashboard"
+              title="Go to Dashboard"
               className={`flex h-10 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 sm:h-11 sm:gap-2 sm:px-3 sm:text-sm ${
                 location.pathname === "/dashboard"
                   ? "border-orange-400/30 bg-orange-500/10 text-orange-400"
