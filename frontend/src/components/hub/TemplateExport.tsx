@@ -66,11 +66,11 @@ export function TemplateExport({ identifier, name }: { identifier: string; name:
       <div className="flex flex-wrap gap-3">
         <button type="button" onClick={copy} disabled={busy !== null} className={button}>
           {busy === "copy" ? <Loader2 size={15} className="animate-spin" /> : <Copy size={15} />}
-          Copy JSON
+          Copy Template
         </button>
         <button type="button" onClick={download} disabled={busy !== null} className={button}>
           {busy === "download" ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-          Download .json
+          Download Template
         </button>
       </div>
       {note && (
