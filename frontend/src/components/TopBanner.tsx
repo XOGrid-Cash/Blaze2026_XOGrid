@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, ExternalLink, Presentation, QrCode } from "lucide-react";
 import { FaGithub } from "react-icons/fa";
@@ -24,6 +25,9 @@ const iconButtonClass =
 const linkClass =
   "inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-medium text-white/85 transition hover:bg-white/[0.08] hover:text-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400";
 
+const slidesUrl =
+  "https://docs.google.com/presentation/d/1R0smlqpU49TfTEWwDbPZYxJXsCHA2I0p/edit?usp=sharing&ouid=108544382373137324447&rtpof=true&sd=true";
+
 export default function TopBanner() {
   const [copied, setCopied] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -36,7 +40,10 @@ export default function TopBanner() {
 
     const root = document.documentElement;
     const update = () => {
-      root.style.setProperty(OFFSET_VAR, `${Math.max(0, element.offsetHeight - window.scrollY)}px`);
+      root.style.setProperty(
+        OFFSET_VAR,
+        `${Math.max(0, element.offsetHeight - window.scrollY)}px`
+      );
     };
 
     update();
@@ -80,26 +87,35 @@ export default function TopBanner() {
         </span>
 
         <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-1">
-          {banner.slidesUrl ? (
-            <a href={banner.slidesUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
-              <Presentation size={14} className="text-orange-400" />
-              Widget Factory slides
-              <ExternalLink size={11} className="text-white/40" />
-            </a>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 text-white/45">
-              <Presentation size={14} />
-              Slides: link coming soon
-            </span>
-          )}
+          <a
+            href={slidesUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={linkClass}
+            aria-label="Open XOGrid presentation slides"
+          >
+            <Presentation size={14} className="text-orange-400" />
+            View Slides
+            <ExternalLink size={11} className="text-white/40" />
+          </a>
 
-          <a href={banner.startRepoUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
+          <a
+            href={banner.startRepoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={linkClass}
+          >
             <FaGithub size={14} className="text-purple-500" />
             Start GitHub
             <ExternalLink size={11} className="text-white/40" />
           </a>
 
-          <a href={banner.repoUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
+          <a
+            href={banner.repoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={linkClass}
+          >
             <FaGithub size={14} className="text-orange-400" />
             GitHub
             <ExternalLink size={11} className="text-white/40" />
@@ -118,7 +134,11 @@ export default function TopBanner() {
               title="Copy address"
               className={iconButtonClass}
             >
-              {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+              {copied ? (
+                <Check size={13} className="text-emerald-400" />
+              ) : (
+                <Copy size={13} />
+              )}
             </button>
             <button
               type="button"
@@ -134,7 +154,11 @@ export default function TopBanner() {
         </div>
       </div>
 
-      <DonationQrModal isOpen={qrOpen} onClose={() => setQrOpen(false)} address={banner.emberAddress} />
+      <DonationQrModal
+        isOpen={qrOpen}
+        onClose={() => setQrOpen(false)}
+        address={banner.emberAddress}
+      />
     </div>
   );
 }
