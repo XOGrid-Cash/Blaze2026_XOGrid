@@ -7,6 +7,29 @@ import { useWallet } from "../../hub/WalletContext";
 import { Stars } from "./Stars";
 
 type Phase = "idle" | "connecting" | "signing" | "posting";
+type Outcome = "published" | "already";
+
+// Remembered per template so the form stays closed after the page reloads its data (or the person comes back later).
+// Storage can be blocked, so every access is wrapped; without it the server still refuses a second review.
+const storageKey = (identifier: string) => `xogrid:reviewed:${identifier}`;
+
+function readOutcome(identifier: string): Outcome | null {
+  try {
+    const value = window.localStorage.getItem(storageKey(identifier));
+
+    return value === "published" || value === "already" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOutcome(identifier: string, outcome: Outcome) {
+  try {
+    window.localStorage.setItem(storageKey(identifier), outcome);
+  } catch {
+    // Not remembering is fine.
+  }
+}
 
 /**
  * Wallet-signed review. The server holds the review text while the wallet signs, so the signature can only publish
@@ -17,7 +40,7 @@ export function ReviewForm({ identifier, onPosted }: { identifier: string; onPos
   const [body, setBody] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(() => readOutcome(identifier));
 
   // The wallet is the site-wide connection. If it is not connected yet, the shared connect modal opens and the review
   // continues on its own once the person has connected.
@@ -39,7 +62,8 @@ export function ReviewForm({ identifier, onPosted }: { identifier: string; onPos
 
     setPhase("posting");
     await finishReview(identifier, challenge.nonce, signed);
-    setDone(true);
+    writeOutcome(identifier, "published");
+    setOutcome("published");
     setPhase("idle");
     onPosted();
   }
@@ -75,15 +99,28 @@ export function ReviewForm({ identifier, onPosted }: { identifier: string; onPos
   }, [phase, connected, session, modalOpen]);
 
   function fail(reason: unknown) {
+    // The server allows one review per wallet per template. If this wallet already has one, close the form
+    // instead of leaving a button that can never succeed.
+    if (reason instanceof Error && /already reviewed/i.test(reason.message)) {
+      writeOutcome(identifier, "already");
+      setOutcome("already");
+      setPhase("idle");
+      onPosted();
+
+      return;
+    }
+
     setError(reason instanceof Error ? reason.message : "Something went wrong.");
     setPhase("idle");
   }
 
-  if (done) {
+  if (outcome) {
     return (
       <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-5 text-sm text-emerald-200">
         <ShieldCheck size={18} className="mb-2" />
-        Your review was signed by your wallet and published. Thank you.
+        {outcome === "published"
+          ? "Your review was signed by your wallet and published. Thank you."
+          : "This wallet has already reviewed this template. There is one review per wallet per template."}
       </div>
     );
   }
