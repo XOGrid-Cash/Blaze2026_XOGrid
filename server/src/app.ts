@@ -10,7 +10,7 @@ import type { Db } from './db.js';
 import { BADGE_RANK, type Badge } from './badges.js';
 import { buildWalletSignRequest } from './auth/challenge-transaction.js';
 import { transactionHashOf } from './review-receipt.js';
-import { attachReceipt, prepareReceipt, receiptSettings, type ReceiptConfig } from './review-chain.js';
+import { attachReceipt, broadcastReceipt, prepareReceipt, refreshPendingReceipts, receiptSettings, type ReceiptConfig } from './review-chain.js';
 import { isReceiptNetwork, publicKeyHexOrUndefined } from './review-address.js';
 import { listUserReviews, ReviewAuth, saveUserReview, validateReview } from './user-reviews.js';
 import { validatePolicy, type Policy } from './policy.js';
@@ -198,6 +198,8 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
             return reply.status(404).send({ error: 'Template not found.' });
         }
 
+        await refreshPendingReceipts(db, options.receipts, identifier);
+
         return listUserReviews(db, identifier, toPositiveInteger(q.page) ?? 1, toPositiveInteger(q.pageSize) ?? 10);
     });
 
@@ -334,6 +336,26 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
             }
 
             return attachReceipt(db, options.receipts, body.network, review, txid);
+        },
+    );
+
+    app.post(
+        '/api/templates/:identifier/reviews/:id/receipt/broadcast',
+        { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+        async (request, reply) => {
+            const { identifier, id } = request.params as { identifier: string; id: string };
+            const body = (request.body ?? {}) as { network?: unknown; signedTransaction?: unknown };
+            const review = await reviewRow(identifier, id);
+
+            if (!review) {
+                return reply.status(404).send({ error: 'Review not found.' });
+            }
+
+            if (!isReceiptNetwork(body.network) || typeof body.signedTransaction !== 'string') {
+                return reply.status(400).send({ error: 'Request needs a network and a signedTransaction.' });
+            }
+
+            return broadcastReceipt(db, options.receipts, body.network, review, body.signedTransaction);
         },
     );
 

@@ -1,7 +1,7 @@
 import { initiateDappRelay } from "@wizardconnect/core";
 import { DappConnectionManager, loadSession, clearSession, type SessionStorage } from "@wizardconnect/dapp";
 
-import { trackSigning } from "./signing";
+import { trackSigning, type SigningKind } from "./signing";
 
 // WizardConnect (Selene, Paytaca and other WizardConnect wallets).
 //
@@ -199,10 +199,13 @@ export async function publicKeyHex(
   }
 }
 
-/** Asks the wallet to sign a request from the server. Nothing is broadcast and no funds move. */
-export async function signWithWallet(session: WalletSession, request: object): Promise<string> {
+/**
+ * Asks the wallet to sign a request from the server. The wallet never broadcasts here. Kind "proof" is a message-only
+ * request that moves no funds; kind "transaction" is a real payment that the server checks and then sends.
+ */
+export async function signWithWallet(session: WalletSession, request: object, kind: SigningKind = "proof"): Promise<string> {
   // The prompt tells the person to open their wallet and approve while this waits.
-  const response = await trackSigning("proof", () =>
+  const response = await trackSigning(kind, () =>
     session.manager.signTransaction({
       transaction: request as never,
       inputPaths: [[0, "receive", 0]],

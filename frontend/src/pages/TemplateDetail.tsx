@@ -16,6 +16,7 @@ import xogridlogo from "../assets/images/xogridlogo.png";
 import { flagTemplate, getTemplate, listReviews, type CheckResult } from "../hub/api";
 import { useLoad } from "../hub/useLoad";
 import { ReviewForm } from "../components/hub/ReviewForm";
+import { explorerUrl } from "../hub/receipts";
 import { Stars } from "../components/hub/Stars";
 import { TemplateContents } from "../components/hub/TemplateContents";
 import { TemplateExport } from "../components/hub/TemplateExport";
@@ -305,6 +306,23 @@ function TemplateDetail() {
                     <p className="mt-2 font-mono text-xs text-slate-500" title={review.reviewerAddress}>
                       {review.reviewer}
                     </p>
+                    {review.receipt && (
+                      <p className="mt-1 text-xs">
+                        {review.receipt.status === "confirmed" ? (
+                          <a
+                            href={explorerUrl(review.receipt.network, review.receipt.txid)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-emerald-300 underline"
+                            title="A public receipt on Bitcoin Cash ties this key, rating and text fingerprint to the template."
+                          >
+                            Recorded on-chain ({review.receipt.network === "mainnet" ? "mainnet" : "chipnet"})
+                          </a>
+                        ) : (
+                          <span className="text-amber-300">On-chain receipt pending</span>
+                        )}
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>

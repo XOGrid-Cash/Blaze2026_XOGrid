@@ -4,6 +4,7 @@ import { Loader2, ShieldCheck, Wallet } from "lucide-react";
 import { finishReview, startReview } from "../../hub/api";
 import { publicKeyHex, signWithWallet, type WalletSession } from "../../hub/wallet";
 import { useWallet } from "../../hub/WalletContext";
+import { RecordOnChain } from "./RecordOnChain";
 import { Stars } from "./Stars";
 
 type Phase = "idle" | "connecting" | "signing" | "posting";
@@ -23,8 +24,21 @@ function readOutcome(identifier: string): Outcome | null {
   }
 }
 
-function writeOutcome(identifier: string, outcome: Outcome) {
+const idKey = (identifier: string) => `xogrid:review-id:${identifier}`;
+
+function readReviewId(identifier: string): number | null {
   try {
+    const value = Number(window.localStorage.getItem(idKey(identifier)));
+
+    return Number.isInteger(value) && value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOutcome(identifier: string, outcome: Outcome, reviewId?: number) {
+  try {
+    if (reviewId) window.localStorage.setItem(idKey(identifier), String(reviewId));
     window.localStorage.setItem(storageKey(identifier), outcome);
   } catch {
     // Not remembering is fine.
@@ -41,6 +55,7 @@ export function ReviewForm({ identifier, onPosted }: { identifier: string; onPos
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(() => readOutcome(identifier));
+  const [reviewId, setReviewId] = useState<number | null>(() => readReviewId(identifier));
 
   // The wallet is the site-wide connection. If it is not connected yet, the shared connect modal opens and the review
   // continues on its own once the person has connected.
@@ -61,8 +76,10 @@ export function ReviewForm({ identifier, onPosted }: { identifier: string; onPos
     const signed = await signWithWallet(current, challenge.walletSignRequest);
 
     setPhase("posting");
-    await finishReview(identifier, challenge.nonce, signed);
-    writeOutcome(identifier, "published");
+    const saved = await finishReview(identifier, challenge.nonce, signed);
+
+    writeOutcome(identifier, "published", saved.id);
+    setReviewId(saved.id);
     setOutcome("published");
     setPhase("idle");
     onPosted();
@@ -116,11 +133,16 @@ export function ReviewForm({ identifier, onPosted }: { identifier: string; onPos
 
   if (outcome) {
     return (
-      <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-5 text-sm text-emerald-200">
-        <ShieldCheck size={18} className="mb-2" />
-        {outcome === "published"
-          ? "Your review was signed by your wallet and published. Thank you."
-          : "This wallet has already reviewed this template. There is one review per wallet per template."}
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-5 text-sm text-emerald-200">
+          <ShieldCheck size={18} className="mb-2" />
+          {outcome === "published"
+            ? "Your review was signed by your wallet and published. Thank you."
+            : "This wallet has already reviewed this template. There is one review per wallet per template."}
+        </div>
+        {outcome === "published" && reviewId !== null && (
+          <RecordOnChain identifier={identifier} reviewId={reviewId} onChange={onPosted} />
+        )}
       </div>
     );
   }
@@ -132,7 +154,7 @@ export function ReviewForm({ identifier, onPosted }: { identifier: string; onPos
       <h3 className="text-lg font-semibold text-white">Add your review</h3>
       <p className="mt-1 text-sm leading-6 text-slate-400">
         Your wallet signs the review to prove it comes from a real key. Nothing is broadcast and no funds move. One
-        review per wallet per template.
+        review per wallet per template. Afterwards you can choose to record it on-chain too.
       </p>
 
       <div className="mt-5">

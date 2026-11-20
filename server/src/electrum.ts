@@ -28,6 +28,8 @@ export interface FetchedTransaction {
 export interface ChainSource {
     getTransaction(txid: string): Promise<FetchedTransaction | undefined>;
     listUnspent(lockingBytecode: Uint8Array): Promise<Unspent[]>;
+    /** Sends a signed transaction to the network and returns the id the server reports. */
+    broadcast(transactionHex: string): Promise<string>;
 }
 
 /** Starting points only; not checked from the build sandbox. Override with ELECTRUM_MAINNET / ELECTRUM_CHIPNET. */
@@ -146,6 +148,10 @@ export class ElectrumServer implements ChainSource {
 
             throw error;
         }
+    }
+
+    async broadcast(transactionHex: string): Promise<string> {
+        return String(await this.call('blockchain.transaction.broadcast', [transactionHex]));
     }
 
     async listUnspent(lockingBytecode: Uint8Array): Promise<Unspent[]> {

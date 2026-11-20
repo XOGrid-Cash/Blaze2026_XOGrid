@@ -8,9 +8,13 @@ import {
     encodeHdPublicKey,
     encodeLockingBytecodeP2pkh,
     encodeTransaction,
+    generateTransaction,
     hash160,
     hexToBin,
     secp256k1,
+    walletTemplateP2pkhNonHd,
+    walletTemplateToCompilerBch,
+    type InputTemplate,
     type TransactionCommon,
 } from '@bitauth/libauth';
 import { p2pkhTemplate } from '@xo-cash/templates';
@@ -21,7 +25,7 @@ import { buildApp } from '../src/app.js';
 import type { Db } from '../src/db.js';
 import { ElectrumServer, parseEndpoint, scriptHashOf, type ChainSource, type FetchedTransaction, type Unspent } from '../src/electrum.js';
 import { reviewAddressFor, resolveReviewIdentity } from '../src/review-address.js';
-import { attachReceipt, prepareReceipt, receiptSettings, type ReceiptConfig, type ReviewRow } from '../src/review-chain.js';
+import { attachReceipt, broadcastReceipt, prepareReceipt, refreshPendingReceipts, receiptSettings, type ReceiptConfig, type ReviewRow } from '../src/review-chain.js';
 import { parseReceiptTransaction, reviewTextDigest, transactionHashOf } from '../src/review-receipt.js';
 import { saveUserReview } from '../src/user-reviews.js';
 import { freshDb } from './helpers.js';
@@ -50,6 +54,22 @@ class FakeChain implements ChainSource {
     transactions = new Map<string, FetchedTransaction>();
     coins: Unspent[] = [];
     down = false;
+    sent: string[] = [];
+    refuse: string | undefined;
+    reportedId: string | undefined;
+
+    async broadcast(hex: string) {
+        if (this.refuse) {
+            throw new Error(this.refuse);
+        }
+
+        const decoded = decodeTransaction(hexToBin(hex)) as TransactionCommon;
+        const txid = this.reportedId ?? this.add(decoded, 0);
+
+        this.sent.push(hex);
+
+        return txid;
+    }
 
     add(transaction: TransactionCommon, confirmations: number | undefined): string {
         const txid = transactionHashOf(transaction);
@@ -167,7 +187,7 @@ describe('review address from the admin identity', () => {
 });
 
 describe('preparing a receipt', () => {
-    it('builds the payment, the data output and change, and asks the wallet to broadcast', async () => {
+    it('builds the payment, the data output and change, and asks the wallet only to sign', async () => {
         const chain = new FakeChain();
 
         fund(chain, 100_000n);
@@ -176,7 +196,7 @@ describe('preparing a receipt', () => {
         const prepared = await prepareReceipt(config(chain), 'mainnet', review, REVIEWER_HEX);
         const transaction = decodeTransaction(hexToBin(prepared.walletSignRequest.transaction as string)) as TransactionCommon;
 
-        expect(prepared.walletSignRequest.broadcast).toBe(true);
+        expect(prepared.walletSignRequest.broadcast).toBe(false);
         expect(transaction.inputs).toHaveLength(1);
         expect(transaction.outputs).toHaveLength(3);
         expect(transaction.outputs[0]!.valueSatoshis).toBe(546n);
@@ -360,6 +380,150 @@ describe('attaching a receipt', () => {
     });
 });
 
+/** A real Schnorr signature over the prepared transaction, the way a wallet signs it. */
+function signForReal(prepared: Awaited<ReturnType<typeof prepareReceipt>>, value: bigint, key = privateKey(1)): TransactionCommon {
+    const decoded = decodeTransaction(hexToBin(prepared.walletSignRequest.transaction as string)) as TransactionCommon;
+    const compiler = walletTemplateToCompilerBch(walletTemplateP2pkhNonHd as never);
+    const input = decoded.inputs[0]!;
+    const inputTemplate: InputTemplate<typeof compiler> = {
+        outpointIndex: input.outpointIndex,
+        outpointTransactionHash: input.outpointTransactionHash,
+        sequenceNumber: input.sequenceNumber,
+        unlockingBytecode: { compiler, data: { keys: { privateKeys: { key: key } } }, valueSatoshis: value, script: 'unlock' },
+    };
+    const generated = generateTransaction({ inputs: [inputTemplate], locktime: decoded.locktime, outputs: decoded.outputs, version: decoded.version });
+
+    if (!generated.success) {
+        throw new Error(JSON.stringify(generated.errors));
+    }
+
+    return generated.transaction;
+}
+
+describe('broadcasting a receipt', () => {
+    async function ready(value = 100_000n) {
+        const chain = new FakeChain();
+
+        fund(chain, value);
+
+        const row = await savedReview();
+        const prepared = await prepareReceipt(config(chain), 'mainnet', row, REVIEWER_HEX);
+
+        return { chain, row, prepared, value };
+    }
+
+    it('sends a correctly signed receipt and records it as pending', async () => {
+        const { chain, row, prepared, value } = await ready();
+        const signed = signForReal(prepared, value);
+        const result = await broadcastReceipt(db, config(chain), 'mainnet', row, binToHex(encodeTransaction(signed)));
+
+        expect(result).toEqual({ status: 'pending', txid: transactionHashOf(signed), network: 'mainnet' });
+        expect(chain.sent).toHaveLength(1);
+
+        const stored = await db.selectFrom('user_reviews').selectAll().where('id', '=', row.id).executeTakeFirstOrThrow();
+
+        expect(stored.receipt_txid).toBe(transactionHashOf(signed));
+        expect(stored.receipt_confirmed).toBe(0);
+    });
+
+    it('sends nothing when the signature is not valid', async () => {
+        const { chain, row, prepared, value } = await ready();
+        const forged = signPrepared(prepared);
+
+        await expect(broadcastReceipt(db, config(chain), 'mainnet', row, binToHex(encodeTransaction(forged)))).rejects.toMatchObject({ status: 422 });
+
+        // Signed by the wrong key: the key no longer hashes to the coin's owner.
+        const wrongKey = signForReal(prepared, value, privateKey(2));
+
+        await expect(broadcastReceipt(db, config(chain), 'mainnet', row, binToHex(encodeTransaction(wrongKey)))).rejects.toMatchObject({ status: 422 });
+        expect(chain.sent).toHaveLength(0);
+    });
+
+    it('sends nothing for another review, a changed output, a huge fee or two inputs', async () => {
+        const { chain, row, prepared, value } = await ready();
+        const signed = signForReal(prepared, value);
+        const hex = binToHex(encodeTransaction(signed));
+
+        await expect(broadcastReceipt(db, config(chain), 'mainnet', { ...row, rating: 1 }, hex)).rejects.toMatchObject({ status: 422 });
+        await expect(broadcastReceipt(db, config(chain), 'mainnet', row, 'zz')).rejects.toMatchObject({ status: 400 });
+
+        const greedy = await prepareReceipt(config(chain), 'mainnet', row, REVIEWER_HEX);
+        const noChange = decodeTransaction(hexToBin(greedy.walletSignRequest.transaction as string)) as TransactionCommon;
+        const burned = { ...greedy, walletSignRequest: { ...greedy.walletSignRequest, transaction: binToHex(encodeTransaction({ ...noChange, outputs: noChange.outputs.slice(0, 2) })) } };
+
+        await expect(broadcastReceipt(db, config(chain), 'mainnet', row, binToHex(encodeTransaction(signForReal(burned, value))))).rejects.toMatchObject({ status: 422 });
+
+        const twoInputs = { ...signed, inputs: [...signed.inputs, ...signed.inputs] };
+
+        await expect(broadcastReceipt(db, config(chain), 'mainnet', row, binToHex(encodeTransaction(twoInputs)))).rejects.toMatchObject({ status: 422 });
+        expect(chain.sent).toHaveLength(0);
+    });
+
+    it('refuses an already confirmed review, and a refusal from the network is reported', async () => {
+        const { chain, row, prepared, value } = await ready();
+        const hex = binToHex(encodeTransaction(signForReal(prepared, value)));
+
+        await expect(broadcastReceipt(db, config(chain), 'mainnet', { ...row, receipt_confirmed: 1 }, hex)).rejects.toMatchObject({ status: 409 });
+
+        chain.refuse = 'the transaction was rejected: dust';
+
+        await expect(broadcastReceipt(db, config(chain), 'mainnet', row, hex)).rejects.toMatchObject({ status: 502 });
+    });
+
+    it('treats a transaction the network already has as sent, and rejects a wrong id from the server', async () => {
+        const { chain, row, prepared, value } = await ready();
+        const signed = signForReal(prepared, value);
+        const hex = binToHex(encodeTransaction(signed));
+
+        chain.add(signed, 0);
+        chain.refuse = 'transaction already in mempool';
+
+        expect((await broadcastReceipt(db, config(chain), 'mainnet', row, hex)).status).toBe('pending');
+
+        chain.refuse = undefined;
+        chain.reportedId = 'ee'.repeat(32);
+
+        await expect(broadcastReceipt(db, config(chain), 'mainnet', row, hex)).rejects.toMatchObject({ status: 502 });
+    });
+
+    it('will not prepare a second receipt once one is confirmed', async () => {
+        const { chain, row } = await ready();
+
+        await expect(prepareReceipt(config(chain), 'mainnet', { ...row, receipt_confirmed: 1 }, REVIEWER_HEX)).rejects.toMatchObject({ status: 409 });
+    });
+});
+
+describe('refreshing pending receipts', () => {
+    it('confirms a pending receipt when the review list is read, at most once a minute', async () => {
+        const chain = new FakeChain();
+
+        fund(chain, 100_000n);
+
+        const row = await savedReview(4, 'a review whose receipt is slow to confirm');
+        const prepared = await prepareReceipt(config(chain), 'mainnet', row, REVIEWER_HEX);
+        const signed = signForReal(prepared, 100_000n);
+
+        await broadcastReceipt(db, config(chain), 'mainnet', row, binToHex(encodeTransaction(signed)));
+
+        const status = async () => (await db.selectFrom('user_reviews').select('receipt_confirmed').where('id', '=', row.id).executeTakeFirstOrThrow()).receipt_confirmed;
+        const start = 10_000_000_000;
+
+        await refreshPendingReceipts(db, config(chain), IDENTIFIER, start);
+        expect(await status()).toBe(0);
+
+        chain.add(signed, 2);
+        await refreshPendingReceipts(db, config(chain), IDENTIFIER, start + 10_000);
+        expect(await status()).toBe(0); // too soon: not looked at again yet
+
+        await refreshPendingReceipts(db, config(chain), IDENTIFIER, start + 61_000);
+        expect(await status()).toBe(1);
+    });
+
+    it('does nothing when receipts are not configured', async () => {
+        await expect(refreshPendingReceipts(db, undefined, IDENTIFIER)).resolves.toBeUndefined();
+    });
+});
+
 describe('receipt settings', () => {
     it('lists only the networks that have a chain server', () => {
         expect(receiptSettings(undefined)).toMatchObject({ enabled: false, networks: {} });
@@ -414,6 +578,25 @@ describe('receipt routes', () => {
         const list = (await app.inject({ method: 'GET', url: `/api/templates/${IDENTIFIER}/reviews` })).json();
 
         expect(list.items[0].receipt).toMatchObject({ status: 'confirmed', network: 'mainnet', txid: transactionHashOf(signed) });
+    });
+
+    it('verifies and sends a signed receipt through the broadcast route', async () => {
+        const review = await savedReview();
+
+        fund(chain, 100_000n);
+
+        const prepared = (await app.inject({ method: 'POST', url: `/api/templates/${IDENTIFIER}/reviews/${review.id}/receipt/prepare`, payload: { network: 'mainnet', publicKey: REVIEWER_HEX } })).json();
+        const signed = signForReal(prepared, 100_000n);
+        const sent = await app.inject({ method: 'POST', url: `/api/templates/${IDENTIFIER}/reviews/${review.id}/receipt/broadcast`, payload: { network: 'mainnet', signedTransaction: binToHex(encodeTransaction(signed)) } });
+
+        expect(sent.statusCode).toBe(200);
+        expect(sent.json()).toMatchObject({ status: 'pending', txid: transactionHashOf(signed) });
+
+        chain.add(signed, 1);
+
+        const checked = await app.inject({ method: 'POST', url: `/api/templates/${IDENTIFIER}/reviews/${review.id}/receipt`, payload: { network: 'mainnet', txid: transactionHashOf(signed) } });
+
+        expect(checked.json().status).toBe('confirmed');
     });
 
     it('answers bad requests with clear errors', async () => {

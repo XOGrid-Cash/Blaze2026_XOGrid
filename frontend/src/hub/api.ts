@@ -86,6 +86,31 @@ export interface UserReview {
   rating: number;
   body: string;
   createdAt: string;
+  /** The on-chain receipt, when the reviewer recorded one. "pending" is sent but not confirmed yet. */
+  receipt: { txid: string; network: ReceiptNetwork; status: "confirmed" | "pending" } | null;
+}
+
+export type ReceiptNetwork = "mainnet" | "chipnet";
+
+export interface ReceiptSettings {
+  enabled: boolean;
+  paymentSatoshis: string;
+  networks: Partial<Record<ReceiptNetwork, { address: string }>>;
+}
+
+export interface PreparedReceipt {
+  walletSignRequest: object;
+  network: ReceiptNetwork;
+  reviewAddress: string;
+  paymentSatoshis: string;
+  feeSatoshis: string;
+  totalSatoshis: string;
+}
+
+export interface ReceiptStatus {
+  status: "confirmed" | "pending";
+  txid: string;
+  network: ReceiptNetwork;
 }
 
 export interface ReviewStats {
@@ -241,6 +266,20 @@ export const finishReview = (
       },
     },
   });
+
+const receiptBase = (identifier: string, reviewId: number) =>
+  `/api/templates/${encodeURIComponent(identifier)}/reviews/${reviewId}/receipt`;
+
+export const getReceiptSettings = () => hub<ReceiptSettings>("/api/receipts/config");
+
+export const prepareReceipt = (identifier: string, reviewId: number, network: ReceiptNetwork, publicKey: string) =>
+  hub<PreparedReceipt>(`${receiptBase(identifier, reviewId)}/prepare`, { method: "POST", body: { network, publicKey } });
+
+export const broadcastReceipt = (identifier: string, reviewId: number, network: ReceiptNetwork, signedTransaction: string) =>
+  hub<ReceiptStatus>(`${receiptBase(identifier, reviewId)}/broadcast`, { method: "POST", body: { network, signedTransaction } });
+
+export const checkReceipt = (identifier: string, reviewId: number, network: ReceiptNetwork, txid: string) =>
+  hub<ReceiptStatus>(receiptBase(identifier, reviewId), { method: "POST", body: { network, txid } });
 
 export const flagTemplate = (identifier: string, reason: string) =>
   hub<{ id: number }>(

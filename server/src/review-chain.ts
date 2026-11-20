@@ -1,4 +1,4 @@
-import { binToHex, decodeTransaction, encodeLockingBytecodeP2pkh, encodeTransaction, hash160, hexToBin, type Output, type TransactionCommon } from '@bitauth/libauth';
+import { binToHex, createVirtualMachineBch2026, decodeTransaction, encodeLockingBytecodeP2pkh, encodeTransaction, hash160, hexToBin, type Output, type TransactionCommon } from '@bitauth/libauth';
 import type { Db } from './db.js';
 import type { ChainSource, Unspent } from './electrum.js';
 import { buildReceiptOutputs, parseReceiptTransaction, REVIEW_PAYMENT_SATOSHIS, reviewTextDigest, transactionHashOf } from './review-receipt.js';
@@ -91,6 +91,10 @@ export async function prepareReceipt(config: ReceiptConfig | undefined, network:
 
     const publicKey = hexToBin(publicKeyHex);
     const ownLock = encodeLockingBytecodeP2pkh(hash160(publicKey));
+    if (review.receipt_confirmed === 1) {
+        throw new RegistryError('This review is already recorded on-chain.', 409);
+    }
+
     const coins = (await reach(() => chain.listUnspent(ownLock))).filter((coin) => !coin.hasToken);
     const payment = REVIEW_PAYMENT_SATOSHIS;
     const withChange = payment + fee(BASE_BYTES + CHANGE_BYTES);
@@ -129,8 +133,9 @@ export async function prepareReceipt(config: ReceiptConfig | undefined, network:
                     lockingBytecode: binToHex(ownLock),
                 },
             ],
-            broadcast: true,
-            userPrompt: `Record your ${review.rating}-star XOGrid review on-chain. This sends ${payment} satoshis plus a small network fee (${paidFee} satoshis) to the XOGrid review address.`,
+            // The wallet only signs. XOGrid checks the signed transaction and then sends it (broadcastReceipt).
+            broadcast: false,
+            userPrompt: `Record your ${review.rating}-star XOGrid review on-chain. This pays ${payment} satoshis to the XOGrid review address plus a network fee of ${paidFee} satoshis, and the rest returns to your own address.`,
         },
         network,
         reviewAddress: reviewAddress.address,
@@ -158,6 +163,24 @@ function decodeChecked(hex: string, expectedTxid: string, what: string): Transac
     }
 
     return decoded;
+}
+
+/** The output an input spends, read from the previous transaction (whose id is recomputed from its bytes). */
+async function spentOutputOf(chain: ChainSource, input: { outpointTransactionHash: Uint8Array; outpointIndex: number }): Promise<Output> {
+    const previousTxid = binToHex(input.outpointTransactionHash.slice().reverse());
+    const previousFetched = await reach(() => chain.getTransaction(previousTxid));
+
+    if (!previousFetched) {
+        throw new RegistryError('The coin that transaction spends could not be found.', 502);
+    }
+
+    const spent = decodeChecked(previousFetched.hex, previousTxid, 'previous').outputs[input.outpointIndex];
+
+    if (!spent) {
+        throw new RegistryError('The coin that transaction spends could not be found.', 502);
+    }
+
+    return spent;
 }
 
 /**
@@ -192,18 +215,7 @@ export async function attachReceipt(db: Db, config: ReceiptConfig | undefined, n
         throw new RegistryError('That transaction has no inputs.', 422);
     }
 
-    const previousTxid = binToHex(first.outpointTransactionHash.slice().reverse());
-    const previousFetched = await reach(() => chain.getTransaction(previousTxid));
-
-    if (!previousFetched) {
-        throw new RegistryError('The coin that transaction spends could not be found.', 502);
-    }
-
-    const spent = decodeChecked(previousFetched.hex, previousTxid, 'previous')['outputs'][first.outpointIndex];
-
-    if (!spent) {
-        throw new RegistryError('The coin that transaction spends could not be found.', 502);
-    }
+    const spent = await spentOutputOf(chain, first);
 
     const parsed = parseReceiptTransaction(transaction, { reviewAddressLockingBytecode: reviewAddress.lockingBytecode, firstInputSpentLockingBytecode: spent.lockingBytecode });
 
@@ -226,6 +238,109 @@ export async function attachReceipt(db: Db, config: ReceiptConfig | undefined, n
         .execute();
 
     return { status: confirmed ? 'confirmed' : 'pending', txid, network };
+}
+
+const lastChecked = new Map<number, number>();
+const RECHECK_MS = 60_000;
+
+/**
+ * Re-checks this template's pending receipts, so a receipt turns "confirmed" even when the reviewer has left the page.
+ * Each review is looked at most once a minute, and a chain server that is down just leaves it pending.
+ */
+export async function refreshPendingReceipts(db: Db, config: ReceiptConfig | undefined, identifier: string, now: number = Date.now()): Promise<void> {
+    if (!config) {
+        return;
+    }
+
+    const rows = await db.selectFrom('user_reviews').selectAll().where('identifier', '=', identifier).where('receipt_confirmed', '=', 0).where('receipt_txid', 'is not', null).execute();
+
+    for (const row of rows) {
+        if (now - (lastChecked.get(row.id) ?? 0) < RECHECK_MS || (row.receipt_network !== 'mainnet' && row.receipt_network !== 'chipnet') || !row.receipt_txid) {
+            continue;
+        }
+
+        lastChecked.set(row.id, now);
+
+        try {
+            await attachReceipt(db, config, row.receipt_network, row, row.receipt_txid);
+        } catch {
+            // Still pending: the next look tries again.
+        }
+    }
+}
+
+/** The most a receipt may pay in network fees. Anything above this is refused before it is sent. */
+export const MAX_RECEIPT_FEE_SATOSHIS = 10_000n;
+
+/**
+ * Takes the transaction the wallet signed, proves it is exactly this review's receipt with a valid signature, and only
+ * then sends it. Nothing is sent unless every check passes: one input, the receipt matches the review, the signature
+ * is valid in the BCH virtual machine, and the fee is sane. The result is "pending" until it confirms.
+ */
+export async function broadcastReceipt(db: Db, config: ReceiptConfig | undefined, network: ReceiptNetwork, review: ReviewRow, signedHex: string): Promise<ReceiptStatus> {
+    const { chain, reviewAddress } = configuredChain(config, network);
+
+    if (review.receipt_confirmed === 1) {
+        throw new RegistryError('This review is already recorded on-chain.', 409);
+    }
+
+    if (!/^([0-9a-fA-F]{2}){1,100000}$/.test(signedHex)) {
+        throw new RegistryError('The signed transaction is not usable.', 400);
+    }
+
+    const decoded = decodeTransaction(hexToBin(signedHex.toLowerCase()));
+
+    if (typeof decoded === 'string' || decoded.inputs.length !== 1) {
+        throw new RegistryError('The signed transaction must have exactly one input.', 422);
+    }
+
+    const spent = await spentOutputOf(chain, decoded.inputs[0]!);
+    const parsed = parseReceiptTransaction(decoded, { reviewAddressLockingBytecode: reviewAddress.lockingBytecode, firstInputSpentLockingBytecode: spent.lockingBytecode });
+
+    if (!parsed.valid) {
+        throw new RegistryError(`That transaction is not a valid XOGrid receipt: ${parsed.reason}.`, 422);
+    }
+
+    const receipt = parsed.receipt;
+
+    if (receipt.identifier !== review.identifier || receipt.reviewerPublicKey !== review.reviewer || receipt.rating !== review.rating || receipt.textHash !== reviewTextDigest(review.body)) {
+        throw new RegistryError('That receipt does not match this review (template, rating, text or wallet).', 422);
+    }
+
+    if (spent.token) {
+        throw new RegistryError('That transaction spends a coin that carries tokens.', 422);
+    }
+
+    const feePaid = spent.valueSatoshis - decoded.outputs.reduce((sum, output) => sum + output.valueSatoshis, 0n);
+
+    if (feePaid < 0n || feePaid > MAX_RECEIPT_FEE_SATOSHIS) {
+        throw new RegistryError(`The network fee (${feePaid} satoshis) is outside what a receipt may pay.`, 422);
+    }
+
+    const verdict = createVirtualMachineBch2026().verify({ sourceOutputs: [spent], transaction: decoded });
+
+    if (typeof verdict === 'string') {
+        throw new RegistryError(`The wallet's signature is not valid for this transaction: ${verdict}`, 422);
+    }
+
+    const txid = receipt.transactionHash;
+
+    try {
+        const reported = await chain.broadcast(binToHex(encodeTransaction(decoded)));
+
+        if (reported !== txid) {
+            throw new RegistryError('The chain server reported a different transaction id.', 502);
+        }
+    } catch (error) {
+        // Sending the same transaction twice is fine: if the server already has it, carry on.
+        if (error instanceof RegistryError || !(await reach(() => chain.getTransaction(txid)))) {
+            throw error instanceof RegistryError ? error : new RegistryError(`The network refused the transaction: ${String((error as Error).message).slice(0, 160)}`, 502);
+        }
+    }
+
+    await db.updateTable('user_reviews').set({ receipt_txid: txid, receipt_network: network, receipt_confirmed: 0 }).where('id', '=', review.id).execute();
+
+    return { status: 'pending', txid, network };
 }
 
 export { reviewTextDigest };
