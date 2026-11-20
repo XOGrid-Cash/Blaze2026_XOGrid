@@ -1,23 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
-  ArrowLeft,
   ArrowUpRight,
   Search,
   SlidersHorizontal,
   Layers3,
   ShieldCheck,
   Clock3,
-  Plus,
   X,
-  LayoutDashboard,
   FileCode2,
   Sparkles,
   RotateCcw,
   ArrowRight,
 } from "lucide-react";
 
-import xogridlogo from "../assets/images/xogridlogo.png";
 import { CategoryFilter } from "../components/hub/CategoryFilter";
 import { listTemplates, type Badge, type Summary } from "../hub/api";
 import { categoryLabel } from "../hub/categories";
@@ -66,7 +62,6 @@ function Explore() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeCategory = searchParams.get("category") ?? "";
   const chooseCategory = (slug: string) => setSearchParams(slug ? { category: slug } : {}, { replace: true });
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const openTemplateFromCard = useTemplateCardClick();
   const [items, setItems] = useState<Summary[]>([]);
   const [total, setTotal] = useState(0);
@@ -153,11 +148,6 @@ function Explore() {
             opacity: 1;
             transform: translateY(0);
           }
-        }
-
-        @keyframes exploreFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
         }
 
         @keyframes exploreFloat {
@@ -307,31 +297,6 @@ function Explore() {
             0 0 30px rgba(139,92,246,.08);
         }
 
-        .explore-nav-link {
-          transition:
-            color .25s ease,
-            background .25s ease,
-            transform .25s ease;
-        }
-
-        .explore-nav-link:hover {
-          color: white;
-          transform: translateY(-2px);
-        }
-
-        .explore-logo {
-          transition: transform .35s ease, filter .35s ease;
-        }
-
-        .explore-logo:hover {
-          transform: scale(1.045);
-          filter: drop-shadow(0 0 12px rgba(167,139,250,.22));
-        }
-
-        .explore-mobile-menu {
-          animation: exploreFadeIn .2s ease both;
-        }
-
         .explore-bottom-cta {
           transition: border-color .35s ease, transform .35s ease;
         }
@@ -373,90 +338,6 @@ function Explore() {
       </div>
 
       <div className="relative z-10">
-        {/* Header */}
-        <header className="sticky top-0 z-40 border-b border-white/[0.07] bg-[#080a10]/85 backdrop-blur-2xl">
-          <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-5 py-4 sm:px-8 lg:px-12 2xl:max-w-[1800px] 2xl:px-14">
-            {/* Back arrow and XOGrid logo */}
-            <div className="flex items-center gap-3">
-              <Link
-                to="/"
-                aria-label="Go back"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] text-slate-300 transition hover:border-orange-400/40 hover:bg-orange-500/10 hover:text-orange-300"
-              >
-                <ArrowLeft size={20} />
-              </Link>
-
-              <Link
-                to="/"
-                aria-label="XOGrid home"
-                className="group shrink-0"
-              >
-                <img
-                  src={xogridlogo}
-                  alt="XOGrid"
-                  className="explore-logo h-12 w-auto max-w-[165px] object-contain sm:h-[54px]"
-                />
-              </Link>
-            </div>
-
-            {/* Desktop navigation */}
-            <nav className="hidden items-center gap-3 sm:flex">
-              <Link
-                to="/dashboard"
-                className="explore-nav-link inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm text-slate-400"
-              >
-                <LayoutDashboard size={16} />
-                Dashboard
-              </Link>
-
-              <Link
-                to="/publish"
-                className="explore-shimmer inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-orange-500/15 transition hover:-translate-y-1 hover:bg-orange-400"
-              >
-                <Plus size={17} />
-                Publish template
-                <ArrowUpRight size={15} />
-              </Link>
-            </nav>
-
-            {/* Mobile menu button */}
-            <button
-              type="button"
-              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-              aria-expanded={mobileMenuOpen}
-              onClick={() => setMobileMenuOpen((previous) => !previous)}
-              className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] text-white transition hover:border-orange-400/30 hover:bg-white/[0.07] sm:hidden"
-            >
-              {mobileMenuOpen ? <X size={20} /> : <Layers3 size={20} />}
-            </button>
-          </div>
-
-          {/* Mobile navigation */}
-          {mobileMenuOpen && (
-            <div className="explore-mobile-menu border-t border-white/[0.07] bg-[#080a10] px-5 py-4 sm:hidden">
-              <nav className="flex flex-col gap-2">
-                <Link
-                  to="/dashboard"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-slate-300 transition hover:bg-white/[0.05]"
-                >
-                  <LayoutDashboard size={17} />
-                  Dashboard
-                </Link>
-
-                <Link
-                  to="/publish"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-orange-400"
-                >
-                  <Plus size={17} />
-                  Publish template
-                  <ArrowUpRight size={15} className="ml-auto" />
-                </Link>
-              </nav>
-            </div>
-          )}
-        </header>
 
         {/* Main content */}
         <div className="mx-auto max-w-[1440px] px-5 pb-24 pt-12 sm:px-8 sm:pt-16 lg:px-12 2xl:max-w-[1800px] 2xl:px-14 2xl:pb-28 2xl:pt-20">

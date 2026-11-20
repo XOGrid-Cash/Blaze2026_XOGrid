@@ -2,6 +2,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* Tailwind's defaults stop at 2xl (1536px). The 3xl: and 4xl: classes used across the app need these to apply. */
+@theme {
+  --breakpoint-3xl: 120rem; /* 1920px */
+  --breakpoint-4xl: 160rem; /* 2560px */
+}
+
 :root {
    font-family: "Space Grotesk", sans-serif;
   font-synthesis: none;

@@ -15,10 +15,13 @@ import {
   Copy,
   Check,
   Blocks,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import xogridlogo from "../assets/images/xogridlogo.png";
+import xogridlogo from "../assets/images/xogridlogo-trimmed.png";
+import xogridmark from "../assets/images/xogridlogo-mark.png";
 import { useHasAdminToken } from "../hub/admin";
 import { shortenAddress, useWallet } from "../hub/WalletContext";
 
@@ -53,8 +56,29 @@ const navigation: NavigationItem[] = [
   },
 ];
 
+// Desktop sidebar collapse is remembered per browser. Storage can be unavailable (private mode, blocked site data).
+const COLLAPSED_KEY = "xogrid.sidebarCollapsed";
+
+function readCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Only affects lg and up: the mobile drawer always shows the full menu.
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch {
+      // Not saved; the sidebar still works for this visit.
+    }
+  }, [collapsed]);
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -64,11 +88,16 @@ export default function DashboardLayout() {
   const isAdmin = useHasAdminToken();
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+    `flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all 2xl:text-base 3xl:py-3.5 ${
+      collapsed ? "lg:justify-center lg:px-0" : ""
+    } ${
       isActive
         ? "border border-orange-500/20 bg-orange-500/10 text-orange-400"
         : "border border-transparent text-slate-400 hover:bg-white/[0.04] hover:text-white"
     }`;
+
+  // In the collapsed rail the label is visually hidden but stays readable by screen readers.
+  const navLabelClass = collapsed ? "lg:sr-only" : "";
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -121,23 +150,45 @@ export default function DashboardLayout() {
 
       {/* Sidebar */}
       <aside
+        id="dashboard-sidebar"
         style={{ top: "var(--banner-offset, 0px)" }}
-        className={`fixed inset-y-0 left-0 z-50 flex w-[270px] flex-col border-r border-white/[0.07] bg-[#080B10] transition-transform duration-300 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[270px] flex-col border-r border-white/[0.07] bg-[#080B10] transition-[transform,width] duration-300 motion-reduce:transition-none ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } lg:translate-x-0 2xl:w-[290px] 3xl:w-[310px]`}
+        } lg:translate-x-0 ${
+          collapsed
+            ? "lg:w-[84px] 2xl:w-[92px] 3xl:w-[100px]"
+            : "2xl:w-[290px] 3xl:w-[320px] 4xl:w-[350px]"
+        }`}
       >
         {/* Logo */}
-        <div className="flex h-[88px] items-center justify-between border-b border-white/[0.07] px-6 2xl:h-[96px] 2xl:px-7 3xl:h-[104px] 3xl:px-8">
+        <div
+          className={`relative flex h-[88px] shrink-0 items-center justify-between border-b border-white/[0.07] px-6 2xl:h-[96px] 2xl:px-7 3xl:h-[112px] 3xl:px-8 4xl:h-[124px] ${
+            collapsed ? "lg:justify-center lg:px-0 2xl:px-0 3xl:px-0" : ""
+          }`}
+        >
           <Link
             to="/"
             onClick={() => setSidebarOpen(false)}
+            aria-label="XOGrid home"
             className="flex items-center"
           >
-            <img
-              src={xogridlogo}
-              alt="XOGrid"
-              className="h-9 w-auto object-contain 2xl:h-10 3xl:h-11"
-            />
+            {/* Full logo (padding trimmed so it fills its height); just the XO grid mark in the collapsed rail.
+                Visibility sits on wrapper spans: the global img { display: block } rule in index.css is unlayered, so
+                it beats Tailwind's hidden / lg:hidden on the img itself. */}
+            <span className={collapsed ? "lg:hidden" : ""}>
+              <img
+                src={xogridlogo}
+                alt=""
+                className="h-12 w-auto object-contain 2xl:h-14 3xl:h-16 4xl:h-[72px]"
+              />
+            </span>
+            <span className={`hidden ${collapsed ? "lg:block" : ""}`}>
+              <img
+                src={xogridmark}
+                alt=""
+                className="h-10 w-auto object-contain 2xl:h-11 3xl:h-12"
+              />
+            </span>
           </Link>
 
           <button
@@ -148,15 +199,36 @@ export default function DashboardLayout() {
           >
             <X size={20} />
           </button>
+
+          {/* Desktop collapse toggle, sitting on the sidebar's right edge */}
+          <button
+            type="button"
+            onClick={() => setCollapsed((previous) => !previous)}
+            aria-controls="dashboard-sidebar"
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="absolute -right-3.5 top-1/2 z-10 hidden h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-[#0B0E14] text-slate-400 shadow-lg shadow-black/40 transition hover:border-orange-500/40 hover:text-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70 lg:flex 3xl:h-8 3xl:w-8 3xl:-right-4"
+          >
+            {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          </button>
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 overflow-y-auto px-4 py-6 2xl:px-5 2xl:py-8 3xl:px-6 3xl:py-10">
-          <p className="mb-3 px-4 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600 2xl:text-[11px] 3xl:text-xs">
+        <div
+          className={`flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 2xl:px-5 2xl:py-8 3xl:px-6 3xl:py-10 ${
+            collapsed ? "lg:px-3 2xl:px-3 3xl:px-4" : ""
+          }`}
+        >
+          <p
+            className={`mb-3 px-4 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600 2xl:text-[11px] 3xl:text-xs ${
+              collapsed ? "lg:hidden" : ""
+            }`}
+          >
             Workspace
           </p>
 
-          <nav className="space-y-1">
+          <nav className="space-y-1" aria-label="Workspace">
             {navigation.map((item) => {
               const Icon = item.icon;
 
@@ -166,11 +238,12 @@ export default function DashboardLayout() {
                     to={item.to}
                     end={item.end}
                     onClick={() => setSidebarOpen(false)}
+                    title={collapsed ? item.label : undefined}
                     className={navLinkClass}
                   >
-                    <Icon size={18} />
-                    <span>{item.label}</span>
-                  </NavLink>           
+                    <Icon size={18} className="shrink-0 2xl:h-5 2xl:w-5" />
+                    <span className={navLabelClass}>{item.label}</span>
+                  </NavLink>
                 </div>
               );
             })}
@@ -179,17 +252,22 @@ export default function DashboardLayout() {
               <NavLink
                 to="/admin"
                 onClick={() => setSidebarOpen(false)}
+                title={collapsed ? "Admin Dashboard" : undefined}
                 className={navLinkClass}
               >
-                <Activity size={18} />
-                <span>Admin Dashboard</span>
+                <Activity size={18} className="shrink-0 2xl:h-5 2xl:w-5" />
+                <span className={navLabelClass}>Admin Dashboard</span>
               </NavLink>
             )}
           </nav>
         </div>
 
         {/* Bottom sidebar section */}
-        <div className="border-t border-white/[0.07] p-4 2xl:p-5 3xl:p-6">
+        <div
+          className={`border-t border-white/[0.07] p-4 2xl:p-5 3xl:p-6 ${
+            collapsed ? "lg:hidden" : ""
+          }`}
+        >
           <div className="rounded-xl border border-orange-500/15 bg-orange-500/[0.06] p-4 2xl:p-5 3xl:p-6">
             <div className="mb-2 flex items-center gap-2 text-orange-400">
               <ShieldCheck size={17} />
@@ -205,7 +283,13 @@ export default function DashboardLayout() {
       </aside>
 
       {/* Main page area */}
-      <div className="min-h-screen lg:pl-[270px] 2xl:pl-[290px] 3xl:pl-[310px]">
+      <div
+        className={`min-h-screen transition-[padding] duration-300 motion-reduce:transition-none ${
+          collapsed
+            ? "lg:pl-[84px] 2xl:pl-[92px] 3xl:pl-[100px]"
+            : "lg:pl-[270px] 2xl:pl-[290px] 3xl:pl-[320px] 4xl:pl-[350px]"
+        }`}
+      >
         {/* Shared header */}
         <header className="sticky top-0 z-30 flex h-[76px] items-center gap-3 border-b border-white/[0.07] bg-[#05070B]/95 px-4 backdrop-blur-xl sm:gap-4 sm:px-8 2xl:h-[88px] 2xl:px-10 3xl:h-[96px] 3xl:px-12">
           <button
