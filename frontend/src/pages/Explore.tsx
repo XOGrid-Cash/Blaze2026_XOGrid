@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useState, type MouseEvent } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -66,6 +66,22 @@ function Explore() {
   const activeCategory = searchParams.get("category") ?? "";
   const chooseCategory = (slug: string) => setSearchParams(slug ? { category: slug } : {}, { replace: true });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navigate = useNavigate();
+
+  // The whole card opens the template. Clicks on its own controls (category chips, the title link), on the identifier
+  // box (so it can be selected and copied), or that finish a text selection are left alone. Ctrl/Cmd-click and
+  // middle-click open the template in a new tab, like a normal link.
+  const openTemplateFromCard = (event: MouseEvent<HTMLElement>, id: string) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("a, button, [data-card-ignore]")) return;
+    if (window.getSelection()?.toString()) return;
+    const path = `/t/${encodeURIComponent(id)}`;
+    if (event.button === 1 || event.ctrlKey || event.metaKey) {
+      window.open(path, "_blank", "noopener");
+      return;
+    }
+    if (event.button === 0) navigate(path);
+  };
   const [items, setItems] = useState<Summary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -615,8 +631,10 @@ function Explore() {
               {filteredTemplates.map((template, index) => (
                 <article
                   key={template.id}
-                  className="explore-card group relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#121522] to-[#0a0c13] p-6 2xl:p-8"
+                  className="explore-card group relative cursor-pointer overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#121522] to-[#0a0c13] p-6 2xl:p-8"
                   style={{ animationDelay: `${index * 120}ms` }}
+                  onClick={(event) => openTemplateFromCard(event, template.id)}
+                  onAuxClick={(event) => openTemplateFromCard(event, template.id)}
                 >
                   <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-violet-500/[0.07] blur-3xl transition duration-500 group-hover:bg-violet-500/[0.15]" />
 
@@ -640,7 +658,12 @@ function Explore() {
                     </p>
 
                     <h3 className="text-xl font-semibold text-white transition group-hover:text-violet-200 2xl:text-2xl">
-                      {template.name}
+                      <Link
+                        to={`/t/${encodeURIComponent(template.id)}`}
+                        className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
+                      >
+                        {template.name}
+                      </Link>
                     </h3>
 
                     <p className="mt-2 text-xs text-slate-500">
@@ -666,12 +689,18 @@ function Explore() {
                       </div>
                     )}
 
-                    <div className="mt-7 rounded-2xl border border-white/[0.06] bg-black/20 p-4 2xl:mt-8 2xl:p-5">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[.15em] text-slate-500">
+                    <div
+                      data-card-ignore
+                      className="mt-7 cursor-text rounded-2xl border border-white/[0.06] bg-black/20 p-4 2xl:mt-8 2xl:p-5"
+                    >
+                      <p className="mb-1 select-none text-[10px] font-semibold uppercase tracking-[.15em] text-slate-500">
                         Template identifier
                       </p>
 
-                      <p className="break-all font-mono text-sm text-slate-300">
+                      <p
+                        className="select-all break-all font-mono text-sm text-slate-300"
+                        title="Click to select, then copy"
+                      >
                         {template.id}
                       </p>
                     </div>
@@ -682,16 +711,11 @@ function Explore() {
                         Added {template.updated}
                       </div>
 
-                      <Link
-                        to={`/t/${encodeURIComponent(template.id)}`}
-                        className="inline-flex items-center gap-2 text-sm font-semibold text-orange-400 transition hover:gap-3 hover:text-orange-300"
-                      >
-                        View template
-                        <ArrowUpRight
-                          size={16}
-                          className="explore-card-arrow"
-                        />
-                      </Link>
+                      <ArrowUpRight
+                        size={18}
+                        aria-hidden="true"
+                        className="explore-card-arrow text-orange-400"
+                      />
                     </div>
                   </div>
                 </article>
