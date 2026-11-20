@@ -170,3 +170,72 @@ export class ElectrumServer implements ChainSource {
 }
 
 export const hexOk = (value: string): boolean => /^([0-9a-f]{2})+$/.test(value) && hexToBin(value).length > 0;
+
+/** "host:port,host:port" gives several servers, tried in order (see FailoverChain). Undefined when any entry is malformed. */
+export function parseEndpoints(spec: string): Endpoint[] | undefined {
+    const items = spec.split(',').map((item) => item.trim()).filter((item) => item.length > 0);
+    const parsed = items.map(parseEndpoint);
+
+    return items.length > 0 && parsed.every((item) => item !== undefined) ? (parsed as Endpoint[]) : undefined;
+}
+
+/**
+ * Several chain servers behind one ChainSource. Every call goes to the first server that answers; a server that errors
+ * is skipped and the next one is tried. Broadcasts are retried on the next server too, because a server whose index
+ * is behind its node rejects a transaction another server accepts. The first error is the one reported.
+ */
+export class FailoverChain implements ChainSource {
+    constructor(private readonly sources: ChainSource[]) {
+        if (sources.length === 0) {
+            throw new Error('FailoverChain needs at least one server.');
+        }
+    }
+
+    private async firstAnswer<T>(ask: (source: ChainSource) => Promise<T>): Promise<T> {
+        let firstError: unknown;
+
+        for (const source of this.sources) {
+            try {
+                return await ask(source);
+            } catch (error) {
+                firstError ??= error;
+            }
+        }
+
+        throw firstError;
+    }
+
+    async getTransaction(txid: string): Promise<FetchedTransaction | undefined> {
+        let firstError: unknown;
+        let answered = false;
+
+        for (const source of this.sources) {
+            try {
+                const found = await source.getTransaction(txid);
+
+                answered = true;
+
+                if (found) {
+                    return found;
+                }
+            } catch (error) {
+                firstError ??= error;
+            }
+        }
+
+        if (!answered) {
+            throw firstError;
+        }
+
+        return undefined;
+    }
+
+    listUnspent(lockingBytecode: Uint8Array): Promise<Unspent[]> {
+        return this.firstAnswer((source) => source.listUnspent(lockingBytecode));
+    }
+
+    broadcast(transactionHex: string): Promise<string> {
+        return this.firstAnswer((source) => source.broadcast(transactionHex));
+    }
+}
+

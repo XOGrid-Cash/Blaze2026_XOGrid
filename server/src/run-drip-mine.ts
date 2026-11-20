@@ -10,7 +10,7 @@ import {
     lockingBytecodeToCashAddress,
     type TransactionCommon,
 } from '@bitauth/libauth';
-import { DEFAULT_ELECTRUM, ElectrumServer, parseEndpoint, type ChainSource, type Unspent } from './electrum.js';
+import { DEFAULT_ELECTRUM, ElectrumServer, FailoverChain, parseEndpoints, type ChainSource, type Unspent } from './electrum.js';
 import { RegistryError } from './registry.js';
 import { transactionHashOf } from './review-receipt.js';
 
@@ -175,7 +175,7 @@ export interface RunConfig {
     chains: Partial<Record<RunNetwork, ChainSource>>;
 }
 
-/** ELECTRUM_MAINNET and ELECTRUM_CHIPNET are "host:port" (TLS) servers, as for receipts. RUN_LIVE=0 switches live runs off. */
+/** ELECTRUM_MAINNET and ELECTRUM_CHIPNET are "host:port" (TLS) servers; a comma-separated list is tried in order. RUN_LIVE=0 switches live runs off. */
 export function buildRunConfig(env: NodeJS.ProcessEnv): RunConfig | undefined {
     if (env.RUN_LIVE === '0') {
         console.log('Live template runs are switched off (RUN_LIVE=0).');
@@ -188,10 +188,12 @@ export function buildRunConfig(env: NodeJS.ProcessEnv): RunConfig | undefined {
     const specs = { mainnet: env.ELECTRUM_MAINNET ?? DEFAULT_ELECTRUM.mainnet, chipnet: env.ELECTRUM_CHIPNET ?? DEFAULT_ELECTRUM.chipnet };
 
     for (const network of ['mainnet', 'chipnet'] as const) {
-        const endpoint = parseEndpoint(specs[network]);
+        const endpoints = parseEndpoints(specs[network]);
 
-        if (endpoint) {
-            chains[network] = new ElectrumServer(endpoint, { insecureTls });
+        if (endpoints) {
+            const servers = endpoints.map((endpoint) => new ElectrumServer(endpoint, { insecureTls }));
+
+            chains[network] = servers.length === 1 ? servers[0]! : new FailoverChain(servers);
         } else {
             console.warn(`ELECTRUM_${network.toUpperCase()} is not a host:port value; live runs are off on ${network}.`);
         }
@@ -243,52 +245,140 @@ export interface DripRun {
     payoutSatoshis: number;
     remainderSatoshis: number;
     sizeBytes: number;
+    /** Coins tried and found already taken before this one went through (only when other coins were allowed). */
+    coinsSkipped: number;
 }
+
+/** A node's way of saying the coin is gone: spent by someone else, or never there as far as it knows. */
+export const SPENT_COIN_ERROR = /missing.?inputs|missingorspent|already.?spent|txn-mempool-conflict|inputs-missing|double.?spend/i;
+
+/** At most this many further coins are tried when the chosen one turns out to be taken. */
+const EXTRA_COINS = 3;
 
 /**
  * Spends one Drip Mine coin. The coin's value comes from the chain, never from the request. The transaction is checked
  * in the virtual machine before it is sent, and the id the server reports must match the id we computed.
+ *
+ * A shared coin can be spent by anyone at any moment, and an index server can lag its node, so "missing inputs" is an
+ * ordinary answer here. With `anyCoin`, the next few spendable coins are tried before giving up. When every try fails
+ * the error says which of the two it looks like: the coin is gone from the list, or the list still shows a coin the
+ * node does not know.
  */
-export async function runDripMine(config: RunConfig, network: RunNetwork, txid: string, index: number, confirmMainnet: boolean): Promise<DripRun> {
+export async function runDripMine(
+    config: RunConfig,
+    network: RunNetwork,
+    txid: string,
+    index: number,
+    confirmMainnet: boolean,
+    anyCoin = false,
+): Promise<DripRun> {
     if (network === 'mainnet' && !confirmMainnet) {
         throw new RegistryError('Mainnet moves real BCH. Confirm that first.', 400);
     }
 
     const chain = chainFor(config, network);
     const unspent = await fromChain(network, () => chain.listUnspent(dripMineLockingBytecode));
-    const coin = unspent.find((item) => item.txid.toLowerCase() === txid.toLowerCase() && item.index === index);
+    const wanted = unspent.find((item) => item.txid.toLowerCase() === txid.toLowerCase() && item.index === index);
 
-    if (!coin) {
+    if (!wanted) {
         throw new RegistryError('That coin is not at the Drip Mine address on this network. It may already have been spent.', 404);
     }
 
-    const view = describeDripCoin(coin);
+    const view = describeDripCoin(wanted);
 
     if (!view.spendable) {
         throw new RegistryError(view.reason ?? 'That coin cannot be spent right now.', 409);
     }
 
-    const plan = buildDripTransaction(coin);
-    const verdict = verifyDripTransaction(plan.transaction, coin.satoshis);
+    const candidates = [wanted];
 
-    if (verdict !== true) {
-        throw new RegistryError(`XOGrid's own check of the transaction failed, so it was not sent: ${verdict}`, 500);
+    if (anyCoin) {
+        const others = unspent
+            .filter((item) => item !== wanted && describeDripCoin(item).spendable)
+            .sort((a, b) => Number(b.satoshis - a.satoshis))
+            .slice(0, EXTRA_COINS);
+
+        candidates.push(...others);
     }
 
-    const returned = await fromChain(network, () => chain.broadcast(plan.transactionHex));
+    let rejection = '';
 
-    if (returned !== plan.transactionId) {
-        throw new RegistryError(`The network reported a different transaction id (${returned}).`, 502);
+    for (const [position, coin] of candidates.entries()) {
+        const plan = buildDripTransaction(coin);
+        const verdict = verifyDripTransaction(plan.transaction, coin.satoshis);
+
+        if (verdict !== true) {
+            if (position === 0) {
+                throw new RegistryError(`XOGrid's own check of the transaction failed, so it was not sent: ${verdict}`, 500);
+            }
+
+            continue;
+        }
+
+        let returned: string;
+
+        try {
+            returned = await chain.broadcast(plan.transactionHex);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+
+            if (SPENT_COIN_ERROR.test(message)) {
+                rejection ||= message;
+
+                continue;
+            }
+
+            throw new RegistryError(`The ${network} network answered with an error: ${message}`, 502);
+        }
+
+        if (returned !== plan.transactionId) {
+            throw new RegistryError(`The network reported a different transaction id (${returned}).`, 502);
+        }
+
+        return {
+            network,
+            transactionId: plan.transactionId,
+            transactionHex: plan.transactionHex,
+            action: plan.action,
+            coin: { txid: coin.txid, index: coin.index, satoshis: Number(coin.satoshis) },
+            payoutSatoshis: Number(plan.payoutSatoshis),
+            remainderSatoshis: Number(plan.remainderSatoshis),
+            sizeBytes: plan.sizeBytes,
+            coinsSkipped: position,
+        };
     }
 
-    return {
-        network,
-        transactionId: plan.transactionId,
-        transactionHex: plan.transactionHex,
-        action: plan.action,
-        coin: { txid: coin.txid, index: coin.index, satoshis: Number(coin.satoshis) },
-        payoutSatoshis: Number(plan.payoutSatoshis),
-        remainderSatoshis: Number(plan.remainderSatoshis),
-        sizeBytes: plan.sizeBytes,
-    };
+    throw await explainRejection(chain, network, wanted, rejection, candidates.length);
+}
+
+/** Works out whether the coin was taken or the list is out of step with the node, and says so. Nothing was spent. */
+async function explainRejection(chain: ChainSource, network: RunNetwork, wanted: Unspent, rejection: string, tried: number): Promise<RegistryError> {
+    let stillListed = true;
+    let fundingKnown = true;
+
+    try {
+        const again = await chain.listUnspent(dripMineLockingBytecode);
+
+        stillListed = again.some((item) => item.txid === wanted.txid && item.index === wanted.index);
+    } catch {
+        // keep the safe assumption: the list was not re-checked
+    }
+
+    try {
+        fundingKnown = (await chain.getTransaction(wanted.txid)) !== undefined;
+    } catch {
+        // unknown either way
+    }
+
+    const triedText = tried > 1 ? `${tried} coins were tried and each was refused. ` : '';
+
+    if (!stillListed) {
+        return new RegistryError(`${triedText}Someone else spent that coin a moment ago. Nothing was spent from here. Refresh the list and pick another.`, 409);
+    }
+
+    return new RegistryError(
+        `${triedText}The ${network} node says the coin's inputs are missing, yet the index server still lists the coin${fundingKnown ? '' : ' and cannot find its funding transaction'}. ` +
+            `That usually means the index server is out of step with its node. Nothing was spent. Details: ${rejection}`,
+        502,
+    );
 }

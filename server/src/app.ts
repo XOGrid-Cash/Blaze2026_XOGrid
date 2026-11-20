@@ -302,7 +302,7 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
     });
 
     app.post('/api/run/drip-mine', { config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async (request, reply) => {
-        const body = (request.body ?? {}) as { network?: unknown; txid?: unknown; index?: unknown; confirmMainnet?: unknown };
+        const body = (request.body ?? {}) as { network?: unknown; txid?: unknown; index?: unknown; confirmMainnet?: unknown; anyCoin?: unknown };
 
         if (!options.run) {
             return reply.status(503).send({ error: 'Live runs are not available on this server.' });
@@ -320,7 +320,7 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
             return reply.status(400).send({ error: 'Request needs a network (mainnet or chipnet), a 64-character transaction id and an output index.' });
         }
 
-        return runDripMine(options.run, body.network, body.txid.toLowerCase(), body.index, body.confirmMainnet === true);
+        return runDripMine(options.run, body.network, body.txid.toLowerCase(), body.index, body.confirmMainnet === true, body.anyCoin === true);
     });
 
     // ----- optional on-chain receipts for a published review (see docs/REVIEW_TRACKING.md) -----

@@ -65,7 +65,7 @@ export function RunDripMine() {
     setCoins(undefined);
   };
 
-  const run = async (coin: DripCoinView) => {
+  const run = async (coin: DripCoinView, anyCoin = false) => {
     setRunning(coinKey(coin));
     setError("");
 
@@ -75,6 +75,7 @@ export function RunDripMine() {
         txid: coin.txid,
         index: coin.index,
         confirmMainnet: confirmed,
+        anyCoin,
       });
 
       setDone(result);
@@ -143,6 +144,22 @@ export function RunDripMine() {
         </p>
       )}
 
+      {coins !== undefined && coins.some((coin) => coin.spendable) && (
+        <button
+          type="button"
+          disabled={!allowed || running !== undefined}
+          onClick={() => {
+            const first = coins.find((coin) => coin.spendable);
+
+            if (first) void run(first, true);
+          }}
+          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-bold text-white transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {running !== undefined ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+          Run one for me
+        </button>
+      )}
+
       {coins !== undefined && coins.length > 0 && (
         <ul className="mt-5 space-y-3">
           {coins.map((coin) => (
@@ -202,6 +219,7 @@ export function RunDripMine() {
             <p className="mt-2 leading-5">
               {done.action === "drip" ? "Drip" : "Terminate"} of {done.coin.txid}:{done.coin.index} ({done.coin.satoshis}{" "}
               sats). Fee {done.payoutSatoshis} sats, {done.sizeBytes} bytes, one input with sequence number 1.
+              {done.coinsSkipped ? ` ${done.coinsSkipped} other coin(s) had already been taken, so the next one was used.` : ""}
             </p>
             <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-black/30 p-3 font-mono">
               {done.transactionHex}

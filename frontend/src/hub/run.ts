@@ -27,6 +27,7 @@ export interface DripRun {
   payoutSatoshis: number;
   remainderSatoshis: number;
   sizeBytes: number;
+  coinsSkipped?: number;
 }
 
 export const listDripCoins = (network: RunNetwork) =>
@@ -39,4 +40,5 @@ export const runDripMine = (body: {
   txid: string;
   index: number;
   confirmMainnet: boolean;
+  anyCoin?: boolean;
 }) => hub<DripRun>("/api/run/drip-mine", { method: "POST", body });
