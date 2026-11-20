@@ -10,7 +10,20 @@ export class Chain {
 
     constructor(readonly network: Network, private readonly log: (line: string) => void = () => undefined) {}
 
-    private async connection(): Promise<ElectrumClient<never>> {
+    private connecting: Promise<ElectrumClient<never>> | undefined;
+
+    /** Lookups can start together; they all wait for the same connection instead of opening one each. */
+    private connection(): Promise<ElectrumClient<never>> {
+        this.connecting ??= this.open().catch((error: unknown) => {
+            this.connecting = undefined;
+
+            throw error;
+        });
+
+        return this.connecting;
+    }
+
+    private async open(): Promise<ElectrumClient<never>> {
         if (this.client) {
             return this.client;
         }
@@ -70,5 +83,6 @@ export class Chain {
     async close(): Promise<void> {
         await this.client?.disconnect().catch(() => undefined);
         this.client = undefined;
+        this.connecting = undefined;
     }
 }

@@ -110,20 +110,32 @@ export class WizardConnectWallet implements WalletConnector {
     }
 }
 
-/** Finds the wallet's plain coins by asking the chain about each shared key's address. */
-export async function scanCoins(wallet: WalletConnector, chain: Chain, scanPerPath = 20): Promise<Coin[]> {
+/**
+ * Finds the wallet's plain coins by asking the chain about each shared key's address. The wallet shares only public
+ * keys (never balances), so this lookup is the only way to learn which coins it has. Addresses are asked in small
+ * groups at once, which is much quicker than one after another.
+ */
+export async function scanCoins(wallet: WalletConnector, chain: Chain, scanPerPath = 20, groupSize = 8): Promise<Coin[]> {
     const coins: Coin[] = [];
     const seen = new Set<string>();
+    const keys = wallet.keys(scanPerPath);
 
-    for (const key of wallet.keys(scanPerPath)) {
-        for (const found of await chain.plainCoins(walletLockingBytecode(key.publicKey))) {
-            const id = `${found.transactionHash}:${found.outputIndex}`;
+    for (let start = 0; start < keys.length; start += groupSize) {
+        const group = keys.slice(start, start + groupSize);
+        const answers = await Promise.all(group.map((key) => chain.plainCoins(walletLockingBytecode(key.publicKey))));
 
-            if (!seen.has(id)) {
-                seen.add(id);
-                coins.push({ ...found, pathName: key.pathName, addressIndex: key.addressIndex, publicKey: key.publicKey });
+        answers.forEach((found, position) => {
+            const key = group[position];
+
+            for (const coin of found) {
+                const id = `${coin.transactionHash}:${coin.outputIndex}`;
+
+                if (!seen.has(id)) {
+                    seen.add(id);
+                    coins.push({ ...coin, pathName: key.pathName, addressIndex: key.addressIndex, publicKey: key.publicKey });
+                }
             }
-        }
+        });
     }
 
     return coins.sort((a, b) => Number(b.valueSatoshis - a.valueSatoshis));

@@ -288,16 +288,47 @@ function VoucherDemo() {
             const found = await scanCoins(wallet.current, getChain());
 
             setCoins(found);
+            // The biggest coin first: it is the one most likely to cover the amount, and it can still be changed.
+            setChosen(found[0]);
 
             if (found.length === 0) {
+                const keys = wallet.current.keys(1);
+                const first = keys.find((key) => key.pathName === 'receive') ?? keys[0];
+                const fund = first
+                    ? ` To get started, send a little BCH to ${addressFor(walletLockingBytecode(first.publicKey), network)} and press Check again.`
+                    : '';
+
                 setError(
                     network === 'chipnet'
-                        ? 'No coins found. In Selene, switch to chipnet and fund it from a chipnet faucet (tbch.googol.cash), then press Find coins again.'
-                        : 'No plain coins found in the first 20 receive and change addresses.'
+                        ? `No coins found on chipnet (the test network). Chipnet coins are free from a faucet (tbch.googol.cash). If your coins are real BCH, switch to Mainnet above.${fund}`
+                        : `No plain coins found on mainnet in the first 20 addresses of each path your wallet shares. Coins that carry tokens are skipped. If you are testing with chipnet coins, switch to Chipnet above.${fund}`
                 );
             }
         }).finally(() => setScanning(false));
     };
+
+    // No button press is needed to look for coins. The wallet shares only public keys, so the page asks the chain about
+    // each one as soon as a wallet is connected on a network that is switched on.
+    const autoScanned = useRef<string | undefined>(undefined);
+
+    useEffect(() => {
+        if (!walletConnected || !walletName || !enabled) {
+            if (!walletConnected) {
+                autoScanned.current = undefined;
+            }
+
+            return;
+        }
+
+        const key = `${network}|${walletName}`;
+
+        if (autoScanned.current === key) {
+            return;
+        }
+
+        autoScanned.current = key;
+        findCoins();
+    }, [walletConnected, walletName, enabled, network]);
 
     const issue = () =>
         run(async () => {
@@ -791,7 +822,7 @@ function VoucherDemo() {
                                     Available coins
                                 </p>
                                 <p className="mt-1 text-xs text-gray-500 2xl:text-sm">
-                                    Scan your wallet for spendable BCH.
+                                    We check your wallet for spendable BCH on its own.
                                 </p>
                             </div>
 
@@ -806,7 +837,7 @@ function VoucherDemo() {
                                 ) : (
                                     <RefreshCw size={16} />
                                 )}
-                                {scanning ? 'Scanning...' : 'Find my coins'}
+                                {scanning ? 'Checking...' : 'Check again'}
                             </button>
                         </div>
 
