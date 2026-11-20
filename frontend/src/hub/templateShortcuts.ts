@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { cameFromJump, jumpTo, type RefKind } from "./templateRefs";
+import { cameFromJump, jumpTo, KIND_PLURAL, type RefKind } from "./templateRefs";
 
 // Keyboard shortcuts on a template's page. Every key is a single key with no Ctrl, Cmd or Alt, and none fire while
 // the reader is typing in a field. Single-letter keys can clash with screen readers and voice control, so they can be
@@ -9,14 +9,7 @@ import { cameFromJump, jumpTo, type RefKind } from "./templateRefs";
 /** The sections of Template contents in order, which is also their number key. */
 export const SECTION_KINDS: RefKind[] = ["action", "transaction", "lockingScript", "script", "constant", "variable"];
 
-export const SECTION_TITLE: Record<RefKind, string> = {
-  action: "Actions",
-  transaction: "Transactions",
-  lockingScript: "Locking scripts",
-  script: "Scripts",
-  constant: "Constants",
-  variable: "Variables",
-};
+export const SECTION_TITLE: Record<RefKind, string> = KIND_PLURAL;
 
 export function sectionId(kind: RefKind): string {
   return `section-${kind}`;

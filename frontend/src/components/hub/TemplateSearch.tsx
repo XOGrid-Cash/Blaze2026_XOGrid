@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronRight, Search, X } from "lucide-react";
 
-import { anchorId, jumpTo, KIND_LABEL, KIND_ORDER, searchRefs, useRefs, type RefTarget, type SearchResult } from "../../hub/templateRefs";
+import { KindIcon } from "./KindIcon";
+import { anchorId, jumpTo, KIND_COLOR, KIND_LABEL, KIND_ORDER, KIND_PLURAL, searchRefs, useRefs, type RefTarget, type SearchResult } from "../../hub/templateRefs";
 import { FOCUS_SEARCH_EVENT } from "../../hub/templateShortcuts";
 
 const PER_GROUP = 8;
@@ -173,7 +174,10 @@ export function TemplateSearch() {
                   onClick={() => go(usage, "pointer")}
                   className="flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left text-xs! text-slate-300 hover:bg-white/[0.05] hover:text-white"
                 >
-                  <span className="shrink-0 text-[10px] uppercase tracking-wider text-slate-500">{KIND_LABEL[usage.kind]}</span>
+                  <span className={`flex shrink-0 items-center gap-1 text-[10px] uppercase tracking-wider ${KIND_COLOR[usage.kind]}`}>
+                    <KindIcon kind={usage.kind} />
+                    {KIND_LABEL[usage.kind]}
+                  </span>
                   <span className="truncate">{usage.name}</span>
                 </button>
               </li>
@@ -231,8 +235,9 @@ export function TemplateSearch() {
           <ul id={listId} role="listbox" aria-label="Search results">
             {groups.map((group) => (
               <Fragment key={group.kind}>
-                <li role="presentation" className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  {KIND_LABEL[group.kind]}s ({group.total}){group.total > group.shown.length && ` · showing ${group.shown.length}`}
+                <li role="presentation" className="flex items-center gap-1.5 px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  <KindIcon kind={group.kind} />
+                  {KIND_PLURAL[group.kind]} ({group.total}){group.total > group.shown.length && ` · showing ${group.shown.length}`}
                 </li>
                 {group.shown.map(row)}
               </Fragment>

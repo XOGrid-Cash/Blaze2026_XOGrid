@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNo
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
-import { anchorId, jumpTo, KIND_LABEL, touchOnly, type RefTarget } from "../../hub/templateRefs";
+import { anchorId, jumpTo, KIND_COLOR, KIND_LABEL, touchOnly, type RefTarget } from "../../hub/templateRefs";
+import { KindIcon } from "./KindIcon";
 
 // The visible parts of template links: the link itself with its hover preview, and the "Back to …" button.
 // The index of link targets and the jump behaviour live in hub/templateRefs.ts.
@@ -52,7 +53,10 @@ function Preview({ target, anchor, rect, onEnter, onLeave, onGo }: {
       onMouseLeave={onLeave}
       className="fixed z-50 rounded-xl border border-white/10 bg-[#141826] p-3 font-sans text-xs shadow-2xl shadow-black/50"
     >
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-orange-300/80">{KIND_LABEL[target.kind]}</p>
+      <p className={`flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider ${KIND_COLOR[target.kind]}`}>
+        <KindIcon kind={target.kind} />
+        {KIND_LABEL[target.kind]}
+      </p>
       <p className="mt-1 text-sm font-semibold text-white">{target.name}</p>
       {target.name !== target.id && <p className="font-mono text-[11px] text-slate-500">{target.id}</p>}
       {target.meta && <p className="mt-1 break-all font-mono text-[11px] text-slate-300">{target.meta}</p>}
@@ -65,8 +69,18 @@ function Preview({ target, anchor, rect, onEnter, onLeave, onGo }: {
   );
 }
 
-/** A link to a part of the template. Renders the children as plain text when the target does not exist. */
-export function RefLink({ target, className, children }: { target: RefTarget | undefined; className?: string; children: ReactNode }) {
+/**
+ * A link to a part of the template, in its kind's colour and, unless `icon` is false, with its kind's icon in front.
+ * Screen readers hear the kind before the name. `className` should not set a text colour, since the kind sets it;
+ * it is the only styling when the target does not exist and the children render as plain text.
+ */
+export function RefLink({ target, className, icon = true, children }: {
+  target: RefTarget | undefined;
+  className?: string;
+  /** False where the kind is already clear, such as names inside script code or a list grouped by kind. */
+  icon?: boolean;
+  children: ReactNode;
+}) {
   const [rect, setRect] = useState<DOMRect | null>(null);
   const link = useRef<HTMLAnchorElement>(null);
   const openTimer = useRef<number | undefined>(undefined);
@@ -123,7 +137,7 @@ export function RefLink({ target, className, children }: { target: RefTarget | u
       <a
         ref={link}
         href={`#${anchor}`}
-        className={`${className ?? ""} cursor-pointer underline decoration-dotted decoration-1 underline-offset-[3px] hover:decoration-solid`}
+        className={`${className ?? ""} ${KIND_COLOR[target.kind]} cursor-pointer underline decoration-dotted decoration-1 underline-offset-[3px] hover:decoration-solid`}
         onMouseEnter={() => show(250)}
         onMouseLeave={() => hide(150)}
         onFocus={() => show(0)}
@@ -138,6 +152,10 @@ export function RefLink({ target, className, children }: { target: RefTarget | u
           go(event);
         }}
       >
+        {/* The words say the kind for screen readers wherever the icon shows it. Without the icon, the kind is already
+            clear from around the link. */}
+        {icon && <KindIcon kind={target.kind} className="mr-1 align-[-1px]" />}
+        {icon && <span className="sr-only">{KIND_LABEL[target.kind]} </span>}
         {children}
       </a>
       {rect && <Preview target={target} anchor={anchor} rect={rect} onEnter={() => show(0)} onLeave={() => hide(150)} onGo={go} />}

@@ -27,6 +27,30 @@ export const KIND_LABEL: Record<RefKind, string> = {
   variable: "Variable",
 };
 
+/** Plural labels, for groups such as "Used in: Locking scripts …". */
+export const KIND_PLURAL: Record<RefKind, string> = {
+  action: "Actions",
+  transaction: "Transactions",
+  lockingScript: "Locking scripts",
+  script: "Scripts",
+  constant: "Constants",
+  variable: "Variables",
+};
+
+/**
+ * One text colour per kind, used for every link to that kind, its icon and the names inside script code, so the kind
+ * of a link can be told at a glance. Script, constant and variable match the colours the script view always used.
+ * Actions are green rather than orange because orange already marks highlights and search matches on this page.
+ */
+export const KIND_COLOR: Record<RefKind, string> = {
+  action: "text-emerald-300",
+  transaction: "text-sky-300",
+  lockingScript: "text-amber-300",
+  script: "text-violet-300",
+  constant: "text-cyan-300",
+  variable: "text-fuchsia-300",
+};
+
 const KIND_SLUG: Record<RefKind, string> = {
   action: "action",
   transaction: "transaction",

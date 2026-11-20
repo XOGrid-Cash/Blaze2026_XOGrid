@@ -4,14 +4,12 @@ import { isFlowControl, layout, tokenize, type Token } from "../../hub/cashAssem
 import { useRefs } from "../../hub/templateRefs";
 import { RefLink } from "./RefLink";
 
-const REF_COLOUR = { script: "text-violet-300", constant: "text-cyan-300", variable: "text-fuchsia-300" } as const;
-
+/** A name inside code: coloured by its kind but without an icon, which would crowd the opcodes. */
 function NameView({ text }: { text: string }) {
   const target = useRefs()?.resolveCode(text);
-  const colour = target && target.kind in REF_COLOUR ? REF_COLOUR[target.kind as keyof typeof REF_COLOUR] : "text-fuchsia-300";
 
   return (
-    <RefLink target={target} className={colour}>
+    <RefLink target={target} icon={false} className={target ? undefined : "text-fuchsia-300"}>
       {text}
     </RefLink>
   );

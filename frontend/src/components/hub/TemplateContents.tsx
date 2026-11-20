@@ -4,7 +4,8 @@ import { ChevronDown } from "lucide-react";
 import { tokenize } from "../../hub/cashAssembly";
 import type { NamedItem, PartFact, PartView, TemplateView, ValueView } from "../../hub/templateView";
 import { InlineCode, ScriptCode } from "./ScriptCode";
-import { anchorId, buildRefIndex, RefContext, sizeLabel, useRefNavigation, useRefs, type RefKind } from "../../hub/templateRefs";
+import { anchorId, buildRefIndex, KIND_LABEL, KIND_PLURAL, RefContext, sizeLabel, useRefNavigation, useRefs, type RefKind } from "../../hub/templateRefs";
+import { KindIcon, KindLegend } from "./KindIcon";
 import { BackChip, RefLink } from "./RefLink";
 import { TemplateSearch } from "./TemplateSearch";
 import { ShortcutsHelp } from "./ShortcutsHelp";
@@ -12,7 +13,9 @@ import { SECTION_KINDS, sectionId } from "../../hub/templateShortcuts";
 
 const card = "rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#121522] to-[#0a0c13] p-6 sm:p-7 2xl:p-9";
 const heading = "text-xs font-semibold uppercase tracking-[.16em] text-slate-500";
-const code = "rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-xs text-slate-200";
+/** A boxed bit of code. `chip` leaves out the colour, for links, whose colour comes from their kind. */
+const chip = "rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-xs";
+const code = `${chip} text-slate-200`;
 /** Room around a jump target so the highlight ring is not clipped, and space above it when scrolled to the top. */
 const target = "scroll-mt-24 rounded-lg";
 
@@ -25,8 +28,11 @@ function Block({ kind, title, count, open, children }: { kind: RefKind; title: s
   return (
     <details id={sectionId(kind)} open={open} className="group scroll-mt-24 rounded-2xl border border-white/[0.06] bg-black/20">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 2xl:p-5 [&::-webkit-details-marker]:hidden">
-        <span className="text-sm font-semibold text-white">
-          {title} <span className="ml-1 font-normal text-slate-500">({count})</span>
+        <span className="flex items-center gap-2 text-sm font-semibold text-white">
+          <KindIcon kind={kind} size={15} />
+          <span>
+            {title} <span className="ml-1 font-normal text-slate-500">({count})</span>
+          </span>
         </span>
         <ChevronDown size={16} className="text-slate-500 transition group-open:rotate-180" />
       </summary>
@@ -35,28 +41,45 @@ function Block({ kind, title, count, open, children }: { kind: RefKind; title: s
   );
 }
 
-/** "Used in: …" with a link to each part that refers to this one, or a "Not used" note where that is worth knowing. */
+/**
+ * "Used in: …" with a link to each part that refers to this one, grouped by kind ("Locking scripts: a, b · Transactions:
+ * c"), or a "Not used" note where that is worth knowing.
+ */
 function UsedIn({ kind, id }: { kind: RefKind; id: string }) {
   const refs = useRefs();
   const usages = refs?.usages(kind, id) ?? [];
 
   if (usages.length === 0) {
     return refs?.reportUnused(kind) ? (
-      <p className="text-xs text-amber-300/80" title="Nothing else in this template refers to it">
+      <p className="text-xs text-rose-300/80" title="Nothing else in this template refers to it">
         Not used anywhere in this template
       </p>
     ) : null;
   }
 
+  // Usages come in section order, so each kind's are already together.
+  const groups = SECTION_KINDS.map((usageKind) => ({ kind: usageKind, items: usages.filter((usage) => usage.kind === usageKind) })).filter(
+    (group) => group.items.length > 0,
+  );
+
   return (
     <p className="text-xs leading-5 text-slate-500">
       Used in{" "}
-      {usages.map((usage, index) => (
-        <Fragment key={`${usage.kind}:${usage.id}`}>
-          {index > 0 && ", "}
-          <RefLink target={usage} className="text-slate-300">
-            {usage.name}
-          </RefLink>
+      {groups.map((group, groupIndex) => (
+        <Fragment key={group.kind}>
+          {groupIndex > 0 && <span className="mx-1.5 text-slate-600">·</span>}
+          <span className="whitespace-nowrap">
+            <KindIcon kind={group.kind} className="mr-1 align-[-1px]" />
+            {group.items.length === 1 ? KIND_LABEL[group.kind] : KIND_PLURAL[group.kind]}:
+          </span>{" "}
+          {group.items.map((usage, index) => (
+            <Fragment key={usage.id}>
+              {index > 0 && ", "}
+              <RefLink target={usage} icon={false}>
+                {usage.name}
+              </RefLink>
+            </Fragment>
+          ))}
         </Fragment>
       ))}
     </p>
@@ -67,6 +90,7 @@ function Named({ kind, item, extra }: { kind: RefKind; item: NamedItem; extra?: 
   return (
     <li id={anchorId(kind, item.id)} data-ref-label={item.name} className={`space-y-1 ${target}`}>
       <p className="text-sm font-semibold text-white">
+        <KindIcon kind={kind} size={14} className="mr-1.5 align-[-2px]" />
         {item.name} <span className={`${code} ml-1 align-middle`}>{item.id}</span>
       </p>
       {item.description && <p className="text-sm leading-6 text-slate-400">{item.description}</p>}
@@ -91,7 +115,7 @@ function Fact({ fact }: { fact: PartFact }) {
       return (
         <Fragment key={id}>
           {index > 0 && ", "}
-          <RefLink target={linked} className={`font-mono text-xs ${fact.refers === "actions" ? "text-slate-200" : "text-fuchsia-300"}`}>
+          <RefLink target={linked} className={`font-mono text-xs ${linked ? "" : "text-slate-300"}`}>
             {linked?.kind === "action" ? linked.name : id}
           </RefLink>
         </Fragment>
@@ -99,7 +123,7 @@ function Fact({ fact }: { fact: PartFact }) {
     });
   } else {
     value = (
-      <RefLink target={refs?.get(fact.refers, fact.code)} className="font-mono text-xs text-violet-300">
+      <RefLink target={refs?.get(fact.refers, fact.code)} className="font-mono text-xs">
         {fact.code}
       </RefLink>
     );
@@ -161,7 +185,10 @@ function ScriptList({ view }: { view: TemplateView }) {
         return (
           <li key={script.id} id={anchorId("script", script.id)} data-ref-label={script.id} className={target}>
             <p className="flex items-center justify-between gap-3 text-sm font-semibold text-white">
-              <span className={code}>{script.id}</span>
+              <span className="flex items-center gap-1.5">
+                <KindIcon kind="script" size={14} />
+                <span className={code}>{script.id}</span>
+              </span>
               {label && (
                 <span className="cursor-help text-xs font-normal text-slate-500" title={label.title}>
                   {label.label}
@@ -231,8 +258,11 @@ export function TemplateContents({ view }: { view: TemplateView }) {
         </div>
         <p className="mt-3 text-sm text-slate-400">
           Everything below comes from the template file itself. The scripts are the rules the coins follow, so read them
-          before you use a template with real money. Underlined names link to where they are defined.
+          before you use a template with real money. Underlined names link to where they are defined; the icon and
+          colour say what kind of part each one is.
         </p>
+
+        <KindLegend kinds={sections} />
 
         <TemplateSearch />
 
@@ -249,7 +279,7 @@ export function TemplateContents({ view }: { view: TemplateView }) {
                       {action.transaction && (
                         <p className="text-xs text-slate-500">
                           Builds transaction{" "}
-                          <RefLink target={refs.get("transaction", action.transaction)} className={code}>
+                          <RefLink target={refs.get("transaction", action.transaction)} className={chip}>
                             {action.transaction}
                           </RefLink>
                         </p>
@@ -262,7 +292,7 @@ export function TemplateContents({ view }: { view: TemplateView }) {
                             <p className="mt-1 text-xs text-slate-500">
                               Provides:{" "}
                               {role.variables.map((variable) => (
-                                <RefLink key={variable} target={refs.get("variable", variable)} className={`${code} mr-1 inline-block`}>
+                                <RefLink key={variable} target={refs.get("variable", variable)} className={`${chip} mr-1 inline-block`}>
                                   {variable}
                                 </RefLink>
                               ))}
