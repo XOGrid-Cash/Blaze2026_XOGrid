@@ -88,11 +88,18 @@ describe('building and checking the transaction', () => {
     });
 
     it('writes the outpoint in wire order and a sequence number of 1', () => {
-        const plan = buildDripTransaction({ txid: `${'00'.repeat(31)}01`, index: 7, satoshis: 5_000n });
+        const txid = `de${'00'.repeat(30)}01`;
+        const plan = buildDripTransaction({ txid, index: 7, satoshis: 5_000n });
+        const wire = binToHex(hexToBin(txid).reverse());
+
+        // the raw bytes: version, one input, then the outpoint hash in wire order (the txid reversed), then the index
+        expect(plan.transactionHex.slice(10, 74)).toBe(wire);
+        expect(plan.transactionHex.slice(74, 82)).toBe('07000000');
+        // and the library reads it back as the same txid text, which is what a node and an explorer show
         const decoded = decodeTransaction(hexToBin(plan.transactionHex));
 
         expect(typeof decoded).not.toBe('string');
-        expect(binToHex((decoded as { inputs: { outpointTransactionHash: Uint8Array }[] }).inputs[0]!.outpointTransactionHash)).toBe(`01${'00'.repeat(31)}`);
+        expect(binToHex((decoded as { inputs: { outpointTransactionHash: Uint8Array }[] }).inputs[0]!.outpointTransactionHash)).toBe(txid);
         expect(plan.transaction.inputs[0]?.sequenceNumber).toBe(1);
         expect(plan.transaction.inputs[0]?.outpointIndex).toBe(7);
         expect(plan.transactionId).toBe(transactionHashOf(plan.transaction));

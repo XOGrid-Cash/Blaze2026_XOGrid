@@ -75,7 +75,8 @@ async function reach<T>(work: () => Promise<T>): Promise<T> {
     }
 }
 
-const hashInWireOrder = (txid: string): Uint8Array => hexToBin(txid).reverse();
+// libauth reverses the outpoint hash when it encodes, so it is held in the same order as the txid text.
+const hashInWireOrder = (txid: string): Uint8Array => hexToBin(txid);
 
 /**
  * Builds the unsigned receipt transaction for a stored review: pays the review address, carries the OP_RETURN, spends
@@ -167,7 +168,7 @@ function decodeChecked(hex: string, expectedTxid: string, what: string): Transac
 
 /** The output an input spends, read from the previous transaction (whose id is recomputed from its bytes). */
 async function spentOutputOf(chain: ChainSource, input: { outpointTransactionHash: Uint8Array; outpointIndex: number }): Promise<Output> {
-    const previousTxid = binToHex(input.outpointTransactionHash.slice().reverse());
+    const previousTxid = binToHex(input.outpointTransactionHash);
     const previousFetched = await reach(() => chain.getTransaction(previousTxid));
 
     if (!previousFetched) {

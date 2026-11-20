@@ -86,7 +86,7 @@ export interface DripPlan {
     sizeBytes: number;
 }
 
-/** The raw transaction for spending one coin. The outpoint hash is in wire order, as the rest of the server writes it. */
+/** The raw transaction for spending one coin. Throws if the encoded outpoint is not the coin's transaction id in wire order. */
 export function buildDripTransaction(coin: { txid: string; index: number; satoshis: bigint }): DripPlan {
     const action = dripActionFor(coin.satoshis);
     const payoutSatoshis = dripPayoutFor(coin.satoshis);
@@ -96,7 +96,8 @@ export function buildDripTransaction(coin: { txid: string; index: number; satosh
         locktime: 0,
         inputs: [
             {
-                outpointTransactionHash: hexToBin(coin.txid).reverse(),
+                // libauth reverses this hash itself when it encodes, so it is given in the same order as the txid text.
+                outpointTransactionHash: hexToBin(coin.txid),
                 outpointIndex: coin.index,
                 // The contract starts with `1 OP_CHECKSEQUENCEVERIFY`: the coin must be at least one block old.
                 sequenceNumber: 1,
@@ -110,6 +111,13 @@ export function buildDripTransaction(coin: { txid: string; index: number; satosh
         ],
     };
     const bytes = encodeTransaction(transaction);
+
+    // Independent of how the library orders things: version (4 bytes) and input count (1 byte) come first, then the
+    // 32-byte outpoint hash, which on the wire is the transaction id reversed. A wrong order here points at a coin that
+    // does not exist, and the node answers "Missing inputs".
+    if (binToHex(bytes.slice(5, 37)) !== binToHex(hexToBin(coin.txid).reverse())) {
+        throw new Error('The encoded outpoint does not match the coin transaction id.');
+    }
 
     return {
         action,

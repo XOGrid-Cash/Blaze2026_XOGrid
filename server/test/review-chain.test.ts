@@ -221,7 +221,8 @@ describe('preparing a receipt', () => {
         const prepared = await prepareReceipt(config(chain), 'mainnet', await savedReview(), REVIEWER_HEX);
         const spent = (prepared.walletSignRequest.sourceOutputs as { outpointTransactionHash: string }[])[0]!.outpointTransactionHash;
 
-        expect(spent).toBe(binToHex(hexToBin(small.txid).reverse()));
+        // the same order as the transaction id text: libauth reverses it when it encodes
+        expect(spent).toBe(small.txid);
     });
 
     it('leaves out change that would be dust and gives it to the fee', async () => {
