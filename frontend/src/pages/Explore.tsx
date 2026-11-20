@@ -1,5 +1,5 @@
-import { useEffect, useState, type MouseEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -21,6 +21,7 @@ import xogridlogo from "../assets/images/xogridlogo.png";
 import { CategoryFilter } from "../components/hub/CategoryFilter";
 import { listTemplates, type Badge, type Summary } from "../hub/api";
 import { categoryLabel } from "../hub/categories";
+import { templatePath, useTemplateCardClick } from "../hub/useTemplateCardClick";
 
 const trustStatuses = ["All statuses", "Unchecked", "Auto-checked", "Reviewed"];
 
@@ -66,22 +67,7 @@ function Explore() {
   const activeCategory = searchParams.get("category") ?? "";
   const chooseCategory = (slug: string) => setSearchParams(slug ? { category: slug } : {}, { replace: true });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const navigate = useNavigate();
-
-  // The whole card opens the template. Clicks on its own controls (category chips, the title link), on the identifier
-  // box (so it can be selected and copied), or that finish a text selection are left alone. Ctrl/Cmd-click and
-  // middle-click open the template in a new tab, like a normal link.
-  const openTemplateFromCard = (event: MouseEvent<HTMLElement>, id: string) => {
-    const target = event.target as HTMLElement;
-    if (target.closest("a, button, [data-card-ignore]")) return;
-    if (window.getSelection()?.toString()) return;
-    const path = `/t/${encodeURIComponent(id)}`;
-    if (event.button === 1 || event.ctrlKey || event.metaKey) {
-      window.open(path, "_blank", "noopener");
-      return;
-    }
-    if (event.button === 0) navigate(path);
-  };
+  const openTemplateFromCard = useTemplateCardClick();
   const [items, setItems] = useState<Summary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -659,7 +645,7 @@ function Explore() {
 
                     <h3 className="text-xl font-semibold text-white transition group-hover:text-violet-200 2xl:text-2xl">
                       <Link
-                        to={`/t/${encodeURIComponent(template.id)}`}
+                        to={templatePath(template.id)}
                         className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
                       >
                         {template.name}

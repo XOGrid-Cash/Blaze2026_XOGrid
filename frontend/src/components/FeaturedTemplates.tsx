@@ -13,6 +13,7 @@ import {
   Layers3,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { templatePath, useTemplateCardClick } from "../hub/useTemplateCardClick";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
@@ -67,6 +68,7 @@ function FeaturedTemplates() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const openTemplateFromCard = useTemplateCardClick();
 
   const fetchSpotlight = async (): Promise<void> => {
     try {
@@ -277,7 +279,9 @@ function FeaturedTemplates() {
                 <article
                   key={identifier}
                   style={{ animationDelay: `${index * 120}ms` }}
-                  className="featured-card group relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 opacity-0 transition-all duration-300 hover:-translate-y-1.5 hover:border-orange-500/35 hover:bg-white/[0.045] hover:shadow-[0_18px_50px_rgba(0,0,0,0.20)] 2xl:rounded-3xl 2xl:p-7 3xl:p-9 4xl:p-10"
+                  onClick={(event) => openTemplateFromCard(event, identifier)}
+                  onAuxClick={(event) => openTemplateFromCard(event, identifier)}
+                  className="featured-card group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 opacity-0 transition-all duration-300 hover:-translate-y-1.5 hover:border-orange-500/35 hover:bg-white/[0.045] hover:shadow-[0_18px_50px_rgba(0,0,0,0.20)] 2xl:rounded-3xl 2xl:p-7 3xl:p-9 4xl:p-10"
                 >
                   {/* Top accent */}
                   <div className="absolute left-0 top-0 h-[2px] w-0 bg-gradient-to-r from-orange-400 to-violet-500 transition-all duration-500 group-hover:w-full" />
@@ -299,7 +303,12 @@ function FeaturedTemplates() {
                   {/* Details */}
                   <div className="mt-5 2xl:mt-7 3xl:mt-8">
                     <h3 className="text-lg font-semibold text-white transition-colors duration-300 group-hover:text-orange-400 2xl:text-xl 3xl:text-2xl">
-                      {template.name || "Untitled template"}
+                      <Link
+                        to={templatePath(identifier)}
+                        className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
+                      >
+                        {template.name || "Untitled template"}
+                      </Link>
                     </h3>
 
                     <p className="mt-2 min-h-[48px] text-xs leading-6 text-white/40 2xl:mt-3 2xl:min-h-[64px] 2xl:text-sm 2xl:leading-7 3xl:text-base">
@@ -309,9 +318,12 @@ function FeaturedTemplates() {
                   </div>
 
                   {/* Identifier */}
-                  <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.015] px-3.5 py-3 2xl:mt-7 2xl:rounded-2xl 2xl:px-5 2xl:py-4">
+                  <div
+                    data-card-ignore
+                    className="mt-5 cursor-text rounded-xl border border-white/[0.06] bg-white/[0.015] px-3.5 py-3 2xl:mt-7 2xl:rounded-2xl 2xl:px-5 2xl:py-4"
+                  >
                     <div className="mb-2 flex items-center justify-between 2xl:mb-3">
-                      <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/30 2xl:text-[11px]">
+                      <span className="select-none text-[9px] font-semibold uppercase tracking-[0.16em] text-white/30 2xl:text-[11px]">
                         Template identifier
                       </span>
 
@@ -334,7 +346,10 @@ function FeaturedTemplates() {
                       )}
                     </div>
 
-                    <code className="block truncate text-[11px] text-white/65 2xl:text-sm">
+                    <code
+                      className="block select-all truncate text-[11px] text-white/65 2xl:text-sm"
+                      title={identifier || undefined}
+                    >
                       {identifier || "Identifier unavailable"}
                     </code>
                   </div>
@@ -370,18 +385,14 @@ function FeaturedTemplates() {
                     </p>
                   )}
 
-                  {/* Inspect */}
-                  <Link
-                    to={`/t/${identifier}`}
-                    className="mt-auto mt-5 flex items-center justify-between border-t border-white/[0.07] pt-4 text-xs font-semibold text-white/55 transition-colors duration-300 hover:text-orange-400 2xl:mt-7 2xl:pt-5 2xl:text-sm"
-                  >
-                    Inspect template
-
+                  {/* Open hint: the whole card opens the template */}
+                  <div className="mt-auto flex justify-end border-t border-white/[0.07] pt-4 text-white/55 transition-colors duration-300 group-hover:text-orange-400 2xl:pt-5">
                     <ArrowUpRight
                       size={16}
+                      aria-hidden="true"
                       className="transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
                     />
-                  </Link>
+                  </div>
                 </article>
               );
             })}
