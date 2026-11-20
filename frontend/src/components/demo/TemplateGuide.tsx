@@ -220,8 +220,8 @@ export default function TemplateGuide({ identifier }: { identifier: string }) {
 
       <p className="flex items-start gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-xs leading-5 text-gray-500">
         <Info size={14} className="mt-0.5 shrink-0" />
-        Only the Claim-Code Voucher can be run from this page today. For the other templates, this guide shows what they do and
-        what the audit found. To use one, download its JSON and import it into an XO-compatible wallet tool.
+        Only the Claim-Code Voucher and Drip Mine can be run from this page today. For the other templates, this guide shows
+        what they do and what the audit found. To use one, download its JSON and import it into an XO-compatible wallet tool.
       </p>
     </div>
   );

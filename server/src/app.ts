@@ -11,6 +11,7 @@ import { BADGE_RANK, type Badge } from './badges.js';
 import { buildWalletSignRequest } from './auth/challenge-transaction.js';
 import { transactionHashOf } from './review-receipt.js';
 import { attachReceipt, broadcastReceipt, prepareReceipt, refreshPendingReceipts, receiptSettings, type ReceiptConfig } from './review-chain.js';
+import { isRunNetwork, listDripCoins, runDripMine, type RunConfig } from './run-drip-mine.js';
 import { isReceiptNetwork, publicKeyHexOrUndefined } from './review-address.js';
 import { listUserReviews, ReviewAuth, saveUserReview, validateReview } from './user-reviews.js';
 import { categoryCounts, isCategory, CATEGORIES } from './categories.js';
@@ -37,6 +38,8 @@ export interface AppOptions {
     webDir?: string;
     /** On-chain review receipts: the admin identity that owns the review address and a chain source per network. */
     receipts?: ReceiptConfig;
+    /** Live runs of templates that need no wallet (Drip Mine): a chain source per network. Off when absent. */
+    run?: RunConfig;
 }
 
 const SORTS = new Set(['newest', 'name', 'flagged', 'rating']);
@@ -282,6 +285,43 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
             return reply.status(201).send({ ...saved, rating: outcome.draft.rating, body: outcome.draft.body });
         },
     );
+
+    // ----- live runs of templates that need no wallet: Drip Mine (see server/src/run-drip-mine.ts) -----
+    app.get('/api/run/drip-mine/coins', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request, reply) => {
+        const { network } = request.query as { network?: unknown };
+
+        if (!options.run) {
+            return reply.status(503).send({ error: 'Live runs are not available on this server.' });
+        }
+
+        if (!isRunNetwork(network)) {
+            return reply.status(400).send({ error: 'Network must be mainnet or chipnet.' });
+        }
+
+        return listDripCoins(options.run, network);
+    });
+
+    app.post('/api/run/drip-mine', { config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async (request, reply) => {
+        const body = (request.body ?? {}) as { network?: unknown; txid?: unknown; index?: unknown; confirmMainnet?: unknown };
+
+        if (!options.run) {
+            return reply.status(503).send({ error: 'Live runs are not available on this server.' });
+        }
+
+        if (
+            !isRunNetwork(body.network) ||
+            typeof body.txid !== 'string' ||
+            !/^[0-9a-f]{64}$/i.test(body.txid) ||
+            typeof body.index !== 'number' ||
+            !Number.isInteger(body.index) ||
+            body.index < 0 ||
+            body.index > 1_000_000
+        ) {
+            return reply.status(400).send({ error: 'Request needs a network (mainnet or chipnet), a 64-character transaction id and an output index.' });
+        }
+
+        return runDripMine(options.run, body.network, body.txid.toLowerCase(), body.index, body.confirmMainnet === true);
+    });
 
     // ----- optional on-chain receipts for a published review (see docs/REVIEW_TRACKING.md) -----
     app.get('/api/receipts/config', async () => receiptSettings(options.receipts));

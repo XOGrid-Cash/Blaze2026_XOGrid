@@ -23,6 +23,8 @@ import { TemplateContents } from "../components/hub/TemplateContents";
 import { TemplateExport } from "../components/hub/TemplateExport";
 import { inviteToolLink } from "../config/inviteTool";
 import { TemplateResources } from "../components/hub/TemplateResources";
+import { RunDripMine } from "../components/hub/RunDripMine";
+import { DRIP_MINE_TEMPLATE_IDENTIFIER } from "../hub/run";
 import { viewTemplate } from "../hub/templateView";
 
 const badgeLabel = { unchecked: "Unchecked", "auto-checked": "Auto-checked", reviewed: "Reviewed" } as const;
@@ -256,6 +258,8 @@ function TemplateDetail() {
                 )}
               </section>
             )}
+
+            {identifier === DRIP_MINE_TEMPLATE_IDENTIFIER && !detail.removed && <RunDripMine />}
 
             {detail.reviews.length > 0 && (
               <section className={card}>
