@@ -45,11 +45,11 @@ const checkIcon = (status: CheckResult["status"]) =>
   ) : status === "fail" ? (
     <XCircle size={17} className="text-rose-300" />
   ) : (
-    <MinusCircle size={17} className="text-slate-500" />
+    <MinusCircle size={17} className="text-slate-400" />
   );
 
 const card = "rounded-3xl border border-white/[0.08] bg-gradient-to-br from-[#121522] to-[#0a0c13] p-6 sm:p-7 2xl:p-9";
-const heading = "text-xs font-semibold uppercase tracking-[.16em] text-slate-500";
+const heading = "text-xs font-semibold uppercase tracking-[.16em] text-slate-400";
 const when = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 
 function TemplateDetail() {
@@ -125,12 +125,15 @@ function TemplateDetail() {
                     )}
                   </div>
                 </div>
-                <span
-                  title={badgeHint[detail.badge]}
-                  className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold ${badgeStyle[detail.badge]}`}
-                >
-                  {badgeLabel[detail.badge]}
-                </span>
+                <div className="max-w-xs sm:text-right">
+                  <span
+                    title={badgeHint[detail.badge]}
+                    className={`inline-block rounded-full border px-3 py-1.5 text-xs font-semibold ${badgeStyle[detail.badge]}`}
+                  >
+                    {badgeLabel[detail.badge]}
+                  </span>
+                  <p className="mt-2 text-xs leading-5 text-slate-400">{badgeHint[detail.badge]}</p>
+                </div>
               </div>
 
               {detail.removed && (
@@ -167,7 +170,7 @@ function TemplateDetail() {
                       setCopied(true);
                       setTimeout(() => setCopied(false), 1500);
                     }}
-                    className="shrink-0 text-slate-500 transition hover:text-white"
+                    className="shrink-0 text-slate-400 transition hover:text-white"
                   >
                     {copied ? <CheckCircle2 size={16} className="text-emerald-300" /> : <Copy size={16} />}
                   </button>
@@ -201,6 +204,16 @@ function TemplateDetail() {
                 )}
               </div>
             </section>
+
+            <nav aria-label="On this page" className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-sm text-slate-400">
+              <span>Jump to</span>
+              <a href="#reviews" className="font-semibold text-orange-400 hover:text-orange-300">
+                Reviews{reviews.data ? ` (${reviews.data.stats.count})` : ""}
+              </a>
+              <a href="#technical" className="font-semibold text-orange-400 hover:text-orange-300">
+                Technical details
+              </a>
+            </nav>
 
             {detail.plainEnglish && (
               <section className={card}>
@@ -242,33 +255,6 @@ function TemplateDetail() {
               </section>
             )}
 
-            {!detail.removed && <TemplateResources resources={view.resources} />}
-
-            {!detail.removed && <TemplateContents view={view} />}
-
-            {detail.auditReport && (
-              <section className={card}>
-                <p className={heading}>Automated checks (version {detail.auditReport.checkerVersion})</p>
-                <ul className="mt-4 space-y-3 2xl:mt-6 2xl:space-y-4">
-                  {detail.auditReport.results.map((check) => (
-                    <li key={check.id} className="flex gap-3">
-                      <span className="mt-0.5">{checkIcon(check.status)}</span>
-                      <div className="max-w-full break-all md:break-normal">
-                        <p className="text-sm font-semibold text-white">{check.title}</p>
-                        <p className="text-sm text-slate-400">{check.message}</p>
-                        {check.details?.map((line) => (
-                          <p key={line} className="font-mono text-xs text-slate-500">
-                            {line}
-                          </p>
-                        ))}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-4 text-xs text-slate-500">Passing the checks is not a safety claim.</p>
-              </section>
-            )}
-
             {detail.reviews.length > 0 && (
               <section className={card}>
                 <p className={heading}>Moderator reviews</p>
@@ -276,7 +262,7 @@ function TemplateDetail() {
                   {detail.reviews.map((review) => (
                     <li key={review.id} className="border-l-2 border-violet-400/40 pl-4">
                       <p className="text-sm text-slate-200">{review.note}</p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-slate-400">
                         {review.reviewerLabel ?? review.reviewerAddress} · {when(review.createdAt)}
                       </p>
                     </li>
@@ -285,10 +271,10 @@ function TemplateDetail() {
               </section>
             )}
 
-            <section className={card}>
+            <section id="reviews" className={`${card} scroll-mt-6`}>
               <div className="flex items-center justify-between gap-3">
                 <p className={heading}>Community reviews</p>
-                <span className="flex items-center gap-2 text-xs text-slate-500">
+                <span className="flex items-center gap-2 text-xs text-slate-400">
                   <Users size={14} />
                   Signed by wallets
                 </span>
@@ -299,7 +285,7 @@ function TemplateDetail() {
                   <span className="text-4xl font-bold">{reviews.data.stats.average?.toFixed(1)}</span>
                   <div>
                     <Stars value={reviews.data.stats.average ?? 0} size={18} />
-                    <p className="text-xs text-slate-500">{reviews.data.stats.count} reviews</p>
+                    <p className="text-xs text-slate-400">{reviews.data.stats.count} reviews</p>
                   </div>
                 </div>
               )}
@@ -314,10 +300,10 @@ function TemplateDetail() {
                   <li key={review.id} className="rounded-2xl border border-white/[0.06] bg-black/20 p-4 2xl:p-6">
                     <div className="flex items-center justify-between gap-3">
                       <Stars value={review.rating} />
-                      <span className="text-xs text-slate-500">{when(review.createdAt)}</span>
+                      <span className="text-xs text-slate-400">{when(review.createdAt)}</span>
                     </div>
                     <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-200">{review.body}</p>
-                    <p className="mt-2 font-mono text-xs text-slate-500" title={review.reviewerAddress}>
+                    <p className="mt-2 font-mono text-xs text-slate-400" title={review.reviewerAddress}>
                       {review.reviewer}
                     </p>
                     {review.receipt && (
@@ -341,7 +327,7 @@ function TemplateDetail() {
                 ))}
               </ul>
 
-              <p className="mt-5 text-xs leading-5 text-slate-500">
+              <p className="mt-5 text-xs leading-5 text-slate-400">
                 A review proves a wallet signed it, not that the person used the template. Anyone can create a new wallet.
               </p>
             </section>
@@ -355,6 +341,40 @@ function TemplateDetail() {
                 }}
               />
             )}
+
+            <div id="technical" className="scroll-mt-6 space-y-6 2xl:space-y-8">
+              <div className="px-1">
+                <h2 className="text-xl font-semibold text-white">Technical details</h2>
+                <p className="mt-1 text-sm text-slate-400">For developers and reviewers: sources, the full template contents and the automated checks.</p>
+              </div>
+
+            {!detail.removed && <TemplateResources resources={view.resources} />}
+
+            {!detail.removed && <TemplateContents view={view} />}
+
+            {detail.auditReport && (
+              <section className={card}>
+                <p className={heading}>Automated checks (version {detail.auditReport.checkerVersion})</p>
+                <ul className="mt-4 space-y-3 2xl:mt-6 2xl:space-y-4">
+                  {detail.auditReport.results.map((check) => (
+                    <li key={check.id} className="flex gap-3">
+                      <span className="mt-0.5">{checkIcon(check.status)}</span>
+                      <div className="max-w-full break-all md:break-normal">
+                        <p className="text-sm font-semibold text-white">{check.title}</p>
+                        <p className="text-sm text-slate-400">{check.message}</p>
+                        {check.details?.map((line) => (
+                          <p key={line} className="font-mono text-xs text-slate-400">
+                            {line}
+                          </p>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-4 text-xs text-slate-400">Passing the checks is not a safety claim.</p>
+              </section>
+            )}
+            </div>
 
             {!detail.removed && (
               <section className={card}>
