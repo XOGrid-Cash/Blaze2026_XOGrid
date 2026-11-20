@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   LayoutDashboard,
   Menu,
+   Play,
   X,
   LogOut,
   ChevronDown,
@@ -49,6 +50,11 @@ const navigation: NavigationItem[] = [
     to: "/publish",
     icon: Upload,
   },
+   {
+      label: "Demo",
+      to: "/demo",
+      icon:  Play,
+    },
   {
     label: "Trust & Policy",
     to: "/policy",
