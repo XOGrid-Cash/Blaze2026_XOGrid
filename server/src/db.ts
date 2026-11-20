@@ -61,6 +61,10 @@ export interface UserReviewsTable {
     created_at: string;
     hidden: number;
     hidden_reason: string | null;
+    /** On-chain receipt (see review-chain.ts). Null until the reviewer records one. */
+    receipt_txid?: string | null;
+    receipt_network?: string | null;
+    receipt_confirmed?: number;
 }
 
 export interface AdminsTable {
@@ -248,6 +252,9 @@ export async function migrate(db: Db): Promise<void> {
         .addColumn('created_at', 'text', (c) => c.notNull())
         .addColumn('hidden', 'integer', (c) => c.notNull().defaultTo(0))
         .addColumn('hidden_reason', 'text')
+        .addColumn('receipt_txid', 'text')
+        .addColumn('receipt_network', 'text')
+        .addColumn('receipt_confirmed', 'integer', (c) => c.notNull().defaultTo(0))
         .addUniqueConstraint('user_reviews_one_per_wallet', ['identifier', 'reviewer'])
         .execute();
 
@@ -292,5 +299,13 @@ export async function upgradeSchema(db: Db): Promise<void> {
 
     if (reviews && !reviews.columns.some((column) => column.name === 'reviewer_label')) {
         await db.schema.alterTable('reviews').addColumn('reviewer_label', 'text').execute();
+    }
+
+    const userReviews = tables.find((table) => table.name === 'user_reviews');
+
+    if (userReviews && !userReviews.columns.some((column) => column.name === 'receipt_txid')) {
+        await db.schema.alterTable('user_reviews').addColumn('receipt_txid', 'text').execute();
+        await db.schema.alterTable('user_reviews').addColumn('receipt_network', 'text').execute();
+        await db.schema.alterTable('user_reviews').addColumn('receipt_confirmed', 'integer', (c) => c.notNull().defaultTo(0)).execute();
     }
 }

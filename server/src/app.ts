@@ -3,11 +3,15 @@ import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { decodeTransaction, hexToBin } from '@bitauth/libauth';
 import { AdminAuth, type LoginProof } from './admin.js';
 import { registerAdminRoutes } from './admin-routes.js';
 import type { Db } from './db.js';
 import { BADGE_RANK, type Badge } from './badges.js';
 import { buildWalletSignRequest } from './auth/challenge-transaction.js';
+import { transactionHashOf } from './review-receipt.js';
+import { attachReceipt, prepareReceipt, receiptSettings, type ReceiptConfig } from './review-chain.js';
+import { isReceiptNetwork, publicKeyHexOrUndefined } from './review-address.js';
 import { listUserReviews, ReviewAuth, saveUserReview, validateReview } from './user-reviews.js';
 import { validatePolicy, type Policy } from './policy.js';
 import {
@@ -30,6 +34,8 @@ export interface AppOptions {
     clock?: () => number;
     /** Directory holding the built web app. When it exists it is served, with index.html for unknown non-API paths. */
     webDir?: string;
+    /** On-chain review receipts: the admin identity that owns the review address and a chain source per network. */
+    receipts?: ReceiptConfig;
 }
 
 const SORTS = new Set(['newest', 'name', 'flagged', 'rating']);
@@ -260,6 +266,74 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
             const saved = await saveUserReview(db, identifier, outcome.publicKey, outcome.draft);
 
             return reply.status(201).send({ ...saved, rating: outcome.draft.rating, body: outcome.draft.body });
+        },
+    );
+
+    // ----- optional on-chain receipts for a published review (see docs/REVIEW_TRACKING.md) -----
+    app.get('/api/receipts/config', async () => receiptSettings(options.receipts));
+
+    async function reviewRow(identifier: string, idText: string) {
+        const id = Number(idText);
+
+        return Number.isInteger(id) && id > 0
+            ? db.selectFrom('user_reviews').selectAll().where('id', '=', id).where('identifier', '=', identifier).where('hidden', '=', 0).executeTakeFirst()
+            : undefined;
+    }
+
+    app.post(
+        '/api/templates/:identifier/reviews/:id/receipt/prepare',
+        { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } },
+        async (request, reply) => {
+            const { identifier, id } = request.params as { identifier: string; id: string };
+            const body = (request.body ?? {}) as { network?: unknown; publicKey?: unknown };
+            const review = await reviewRow(identifier, id);
+
+            if (!review) {
+                return reply.status(404).send({ error: 'Review not found.' });
+            }
+
+            const publicKey = publicKeyHexOrUndefined(body.publicKey);
+
+            if (!isReceiptNetwork(body.network) || !publicKey) {
+                return reply.status(400).send({ error: 'Request needs a network (mainnet or chipnet) and the wallet public key.' });
+            }
+
+            return prepareReceipt(options.receipts, body.network, review, publicKey);
+        },
+    );
+
+    app.post(
+        '/api/templates/:identifier/reviews/:id/receipt',
+        { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+        async (request, reply) => {
+            const { identifier, id } = request.params as { identifier: string; id: string };
+            const body = (request.body ?? {}) as { network?: unknown; txid?: unknown; signedTransaction?: unknown };
+            const review = await reviewRow(identifier, id);
+
+            if (!review) {
+                return reply.status(404).send({ error: 'Review not found.' });
+            }
+
+            if (!isReceiptNetwork(body.network)) {
+                return reply.status(400).send({ error: 'Request needs a network (mainnet or chipnet).' });
+            }
+
+            let txid = typeof body.txid === 'string' ? body.txid : undefined;
+
+            // A wallet may hand back the signed transaction instead of an id: derive the id from the bytes.
+            if (!txid && typeof body.signedTransaction === 'string' && /^([0-9a-fA-F]{2}){1,100000}$/.test(body.signedTransaction)) {
+                const decoded = decodeTransaction(hexToBin(body.signedTransaction));
+
+                if (typeof decoded !== 'string') {
+                    txid = transactionHashOf(decoded);
+                }
+            }
+
+            if (!txid) {
+                return reply.status(400).send({ error: 'Request needs a txid or a signedTransaction.' });
+            }
+
+            return attachReceipt(db, options.receipts, body.network, review, txid);
         },
     );
 

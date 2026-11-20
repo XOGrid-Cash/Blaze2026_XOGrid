@@ -2,6 +2,7 @@ import { seedAdmins } from './admin.js';
 import { buildApp } from './app.js';
 import { migrate, openDatabase } from './db.js';
 import { reauditStale } from './registry.js';
+import { buildReceiptConfig } from './receipts-setup.js';
 import { seed, seedCommunity } from './seed.js';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -48,6 +49,9 @@ if (admins.skipped.length > 0) {
 
 console.log(`Moderators on the allowlist from ADMIN_IDENTITIES: ${admins.added.join(', ') || '(none)'}`);
 
-const app = await buildApp(db, { logger: true, webDir: process.env.WEB_DIR ?? '../web/dist' });
+// On-chain review receipts. The review address is derived from an admin identity (REVIEW_IDENTITY_LABEL picks one by
+// its label; otherwise the first usable one). ELECTRUM_MAINNET and ELECTRUM_CHIPNET are "host:port" (TLS) servers.
+const receipts = await buildReceiptConfig(db, process.env);
+const app = await buildApp(db, { logger: true, webDir: process.env.WEB_DIR ?? '../web/dist', receipts });
 
 await app.listen({ port, host });

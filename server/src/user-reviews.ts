@@ -125,6 +125,14 @@ export function addressOfPublicKey(publicKeyHex: string): string {
     return result.address;
 }
 
+function receiptOf(row: { receipt_txid?: string | null; receipt_network?: string | null; receipt_confirmed?: number }): UserReview['receipt'] {
+    if (!row.receipt_txid || (row.receipt_network !== 'mainnet' && row.receipt_network !== 'chipnet')) {
+        return null;
+    }
+
+    return { txid: row.receipt_txid, network: row.receipt_network, status: row.receipt_confirmed === 1 ? 'confirmed' : 'pending' };
+}
+
 const shorten = (address: string): string => `${address.slice(0, 16)}...${address.slice(-6)}`;
 
 export interface UserReview {
@@ -134,6 +142,8 @@ export interface UserReview {
     rating: number;
     body: string;
     createdAt: string;
+    /** The on-chain receipt, when the reviewer recorded one. "pending" has been broadcast but is not confirmed yet. */
+    receipt: { txid: string; network: 'mainnet' | 'chipnet'; status: 'confirmed' | 'pending' } | null;
 }
 
 export interface RatingStats {
@@ -206,7 +216,7 @@ export async function listUserReviews(db: Db, identifier: string, page = 1, page
         items: rows.slice((current - 1) * size, current * size).map((row) => {
             const address = addressOfPublicKey(row.reviewer);
 
-            return { id: row.id, reviewerAddress: address, reviewer: shorten(address), rating: row.rating, body: row.body, createdAt: row.created_at };
+            return { id: row.id, reviewerAddress: address, reviewer: shorten(address), rating: row.rating, body: row.body, createdAt: row.created_at, receipt: receiptOf(row) };
         }),
         total: rows.length,
         page: current,
