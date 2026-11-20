@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { AdminAuth, type AdminSession, type LoginProof } from './admin.js';
 import { buildWalletSignRequest } from './auth/challenge-transaction.js';
+import { normalizeCategories, setCategories } from './categories.js';
 import type { Db } from './db.js';
 import { setReviewHidden } from './user-reviews.js';
 import { getSummary, listTemplates, RegistryError, setSpotlight } from './registry.js';
@@ -254,6 +255,21 @@ export function registerAdminRoutes(app: FastifyInstance, db: Db, auth: AdminAut
         return { identifier, removed: false };
     });
 
+
+    // Moderators can re-file a template. Publishers only choose categories when they first publish.
+    app.put('/api/admin/templates/:identifier/categories', { preHandler: requireAdmin }, async (request, reply) => {
+        const { identifier } = request.params as { identifier: string };
+        const categories = normalizeCategories((request.body as { categories?: unknown } | undefined)?.categories);
+
+        if (!(await getSummary(db, identifier))) {
+            return reply.status(404).send({ error: 'Template not found.' });
+        }
+
+        await setCategories(db, identifier, categories);
+        await logAction(db, request.admin!.label, 'categories', identifier, categories.join(', ') || '(none)');
+
+        return { identifier, categories };
+    });
 
     app.get('/api/admin/user-reviews', { preHandler: requireAdmin }, async (request) => {
         const q = request.query as { hidden?: string };

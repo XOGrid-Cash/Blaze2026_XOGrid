@@ -24,10 +24,17 @@ export interface Summary {
   averageRating: number | null;
   removed: boolean;
   removedReason: string | null;
+  /** Category slugs, in display order. A template can be in several. */
+  categories: string[];
   audit: {
     checkerVersion: string;
     counts: Counts;
   } | null;
+}
+
+export interface CategoryList {
+  total: number;
+  categories: { slug: string; label: string; count: number }[];
 }
 
 export interface CheckResult {
@@ -142,6 +149,7 @@ export interface PublishResponse {
   identifier: string;
   created: boolean;
   badge: Badge;
+  categories?: string[];
 }
 
 export type TemplateSort = "newest" | "name" | "flagged" | "rating";
@@ -200,6 +208,7 @@ export async function hub<T>(
 export function listTemplates(params: {
   query?: string;
   badge?: Badge;
+  category?: string;
   sort?: TemplateSort;
   page?: number;
   pageSize?: number;
@@ -296,15 +305,19 @@ export const flagTemplate = (identifier: string, reason: string) =>
 // The server returns HTTP 201 for a new template
 // or HTTP 200 when the template already exists.
 
+export const getCategories = () => hub<CategoryList>("/api/categories");
+
 export const publishTemplate = (
   template: unknown,
   publisher?: string,
+  categories?: string[],
 ): Promise<PublishResponse> =>
   hub<PublishResponse>("/api/templates", {
     method: "POST",
     body: {
       template,
       ...(publisher ? { publisher } : {}),
+      ...(categories && categories.length > 0 ? { categories } : {}),
     },
   });
 

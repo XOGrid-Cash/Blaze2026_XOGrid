@@ -2,6 +2,7 @@ import { describeTemplate, type PlainEnglish } from './describe.js';
 import { generateTemplateIdentifier, parseTemplate, serializeTemplate } from '@xo-cash/utils';
 import { CHECKER_VERSION, hasNoFailures, MAX_TEMPLATE_BYTES, runAudit, type AuditReport, type CheckResult } from './audit/index.js';
 import { deriveBadge, type Badge } from './badges.js';
+import { loadCategories, normalizeCategories, setCategoriesIfEmpty } from './categories.js';
 import type { Db } from './db.js';
 import { loadRatings, type RatingStats } from './user-reviews.js';
 import { evaluatePolicy, type Policy, type PolicyDecision } from './policy.js';
@@ -36,6 +37,8 @@ export interface TemplateSummary {
     averageRating: number | null;
     removed: boolean;
     removedReason: string | null;
+    /** Category names (see categories.ts), in display order. A template can be in several. */
+    categories: string[];
     audit: { checkerVersion: string; counts: AuditCounts } | null;
 }
 
@@ -54,6 +57,7 @@ export interface TemplateDetail extends TemplateSummary {
 export interface ListParameters {
     query?: string;
     badge?: Badge;
+    category?: string;
     sort?: 'newest' | 'name' | 'flagged' | 'rating';
     page?: number;
     pageSize?: number;
@@ -87,7 +91,9 @@ export async function publishTemplate(
     db: Db,
     input: unknown,
     publisher: string,
-): Promise<{ identifier: string; created: boolean; badge: Badge }> {
+    categories: unknown = [],
+): Promise<{ identifier: string; created: boolean; badge: Badge; categories: string[] }> {
+    const chosenCategories = normalizeCategories(categories);
     const rawText = typeof input === 'string' ? input : safeStringify(input);
 
     if (Buffer.byteLength(rawText, 'utf8') > MAX_TEMPLATE_BYTES) {
@@ -119,7 +125,8 @@ export async function publishTemplate(
     if (existing) {
         const summary = await getSummary(db, identifier);
 
-        return { identifier, created: false, badge: summary?.badge ?? 'unchecked' };
+        // Someone re-publishing a template can file it only if nobody has yet; they cannot re-file it afterwards.
+        return { identifier, created: false, badge: summary?.badge ?? 'unchecked', categories: await setCategoriesIfEmpty(db, identifier, chosenCategories) };
     }
 
     const template = parsed as unknown as { name?: unknown; description?: unknown };
@@ -140,9 +147,10 @@ export async function publishTemplate(
 
     await recordAudit(db, identifier, json, submittedIdentifier);
 
+    const filedUnder = await setCategoriesIfEmpty(db, identifier, chosenCategories);
     const summary = await getSummary(db, identifier);
 
-    return { identifier, created: true, badge: summary?.badge ?? 'unchecked' };
+    return { identifier, created: true, badge: summary?.badge ?? 'unchecked', categories: filedUnder };
 }
 
 /** Runs the audit for a stored template and stores a new report row. */
@@ -202,6 +210,7 @@ interface Enrichment {
     reviews: Map<string, number>;
     openFlags: Map<string, number>;
     ratings: Map<string, RatingStats>;
+    categories: Map<string, string[]>;
 }
 
 async function loadEnrichment(db: Db): Promise<Enrichment> {
@@ -225,7 +234,7 @@ async function loadEnrichment(db: Db): Promise<Enrichment> {
         openFlags.set(row.identifier, (openFlags.get(row.identifier) ?? 0) + 1);
     }
 
-    return { reports, reviews, openFlags, ratings: await loadRatings(db) };
+    return { reports, reviews, openFlags, ratings: await loadRatings(db), categories: await loadCategories(db) };
 }
 
 type TemplateRow = {
@@ -259,6 +268,7 @@ function toSummary(row: TemplateRow, enrichment: Enrichment): TemplateSummary {
         averageRating: enrichment.ratings.get(row.identifier)?.average ?? null,
         removed: row.removed === 1,
         removedReason: row.removed_reason,
+        categories: enrichment.categories.get(row.identifier) ?? [],
         audit: report ? { checkerVersion: report.checkerVersion, counts: countResults(report.results) } : null,
     };
 }
@@ -293,6 +303,10 @@ export async function listTemplates(db: Db, parameters: ListParameters = {}): Pr
 
     if (parameters.badge) {
         items = items.filter((item) => item.badge === parameters.badge);
+    }
+
+    if (parameters.category) {
+        items = items.filter((item) => item.categories.includes(parameters.category!));
     }
 
     const sort = parameters.sort ?? 'newest';

@@ -21,6 +21,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 
+import { CategoryPicker } from "../components/hub/CategoryPicker";
 import { publishTemplate } from "../hub/api";
 import { useWallet } from "../hub/WalletContext";
 
@@ -62,6 +63,7 @@ function Publish() {
   const [result, setResult] = useState<PublishResult | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const [jsonValid, setJsonValid] = useState<boolean>(false);
+  const [categories, setCategories] = useState<string[]>([]);
 
   const [dragging, setDragging] = useState<boolean>(false);
 
@@ -308,7 +310,7 @@ function Publish() {
     try {
       // The API returns PublishResponse directly.
       // It does not return a { data, status } wrapper.
-      const response = await publishTemplate(parsedTemplate, address || undefined);
+      const response = await publishTemplate(parsedTemplate, address || undefined, categories);
 
       if (!response.identifier) {
         throw new Error(
@@ -722,6 +724,8 @@ function Publish() {
                     />
                   </div>
                 </div>
+
+                <CategoryPicker selected={categories} onChange={setCategories} disabled={loading} />
 
                 {/* VALIDATION ERROR */}
                 {error && (

@@ -17,6 +17,7 @@ import { flagTemplate, getTemplate, listReviews, type CheckResult } from "../hub
 import { useLoad } from "../hub/useLoad";
 import { ReviewForm } from "../components/hub/ReviewForm";
 import { explorerUrl } from "../hub/receipts";
+import { categoryLabel } from "../hub/categories";
 import { Stars } from "../components/hub/Stars";
 import { TemplateContents } from "../components/hub/TemplateContents";
 import { TemplateExport } from "../components/hub/TemplateExport";
@@ -109,6 +110,19 @@ function TemplateDetail() {
                   <div>
                     <p className="text-xs font-medium uppercase tracking-[.15em] text-violet-300">{detail.publisher}</p>
                     <h1 className="text-3xl font-bold tracking-tight 2xl:text-4xl">{detail.name}</h1>
+                    {detail.categories?.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {detail.categories.map((slug) => (
+                          <Link
+                            key={slug}
+                            to={`/explore?category=${encodeURIComponent(slug)}`}
+                            className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-400 transition hover:border-orange-400/40 hover:text-white"
+                          >
+                            {categoryLabel(slug)}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <span

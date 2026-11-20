@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -18,7 +18,9 @@ import {
 } from "lucide-react";
 
 import xogridlogo from "../assets/images/xogridlogo.png";
+import { CategoryFilter } from "../components/hub/CategoryFilter";
 import { listTemplates, type Badge, type Summary } from "../hub/api";
+import { categoryLabel } from "../hub/categories";
 
 const trustStatuses = ["All statuses", "Unchecked", "Auto-checked", "Reviewed"];
 
@@ -59,6 +61,10 @@ function Explore() {
   const [search, setSearch] = useState("");
   const [activeStatus, setActiveStatus] = useState("All statuses");
   const [sortBy, setSortBy] = useState("recent");
+  // The category lives in the address (/explore?category=payment), so a filtered view can be shared and the back button works.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeCategory = searchParams.get("category") ?? "";
+  const chooseCategory = (slug: string) => setSearchParams(slug ? { category: slug } : {}, { replace: true });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [items, setItems] = useState<Summary[]>([]);
   const [total, setTotal] = useState(0);
@@ -76,6 +82,7 @@ function Explore() {
       listTemplates({
         query: search.trim() || undefined,
         badge: badgeFromLabel[activeStatus],
+        category: activeCategory || undefined,
         sort: sortFromLabel[sortBy],
         pageSize: 50,
       })
@@ -106,7 +113,7 @@ function Explore() {
       current = false;
       clearTimeout(timer);
     };
-  }, [search, activeStatus, sortBy]);
+  }, [search, activeStatus, sortBy, activeCategory]);
 
   const filteredTemplates = items.map((item) => ({
     id: item.identifier,
@@ -116,18 +123,21 @@ function Explore() {
     updated: formatDate(item.createdAt),
     rating: item.averageRating,
     reviews: item.userReviewCount,
+    categories: item.categories ?? [],
   }));
 
   const clearFilters = () => {
     setSearch("");
     setActiveStatus("All statuses");
     setSortBy("recent");
+    chooseCategory("");
   };
 
   const hasActiveFilters =
     search !== "" ||
     activeStatus !== "All statuses" ||
-    sortBy !== "recent";
+    sortBy !== "recent" ||
+    activeCategory !== "";
 
   return (
     <main className="explore-page relative min-h-screen overflow-hidden bg-[#05070b] text-white">
@@ -557,6 +567,8 @@ function Explore() {
                 <option value="name">Name: A to Z</option>
               </select>
             </div>
+
+            <CategoryFilter active={activeCategory} onChoose={chooseCategory} />
           </section>
 
           {/* Results heading */}
@@ -638,6 +650,21 @@ function Explore() {
                           } review${template.reviews === 1 ? "" : "s"}`
                         : "No reviews yet"}
                     </p>
+
+                    {template.categories.length > 0 && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {template.categories.map((slug) => (
+                          <button
+                            key={slug}
+                            type="button"
+                            onClick={() => chooseCategory(slug)}
+                            className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-400 transition hover:border-orange-400/40 hover:text-white"
+                          >
+                            {categoryLabel(slug)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="mt-7 rounded-2xl border border-white/[0.06] bg-black/20 p-4 2xl:mt-8 2xl:p-5">
                       <p className="mb-1 text-[10px] font-semibold uppercase tracking-[.15em] text-slate-500">

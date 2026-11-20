@@ -13,6 +13,7 @@ import { transactionHashOf } from './review-receipt.js';
 import { attachReceipt, broadcastReceipt, prepareReceipt, refreshPendingReceipts, receiptSettings, type ReceiptConfig } from './review-chain.js';
 import { isReceiptNetwork, publicKeyHexOrUndefined } from './review-address.js';
 import { listUserReviews, ReviewAuth, saveUserReview, validateReview } from './user-reviews.js';
+import { categoryCounts, isCategory, CATEGORIES } from './categories.js';
 import { validatePolicy, type Policy } from './policy.js';
 import {
     addFlag,
@@ -130,6 +131,14 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
             parameters.badge = q.badge as Badge;
         }
 
+        if (q.category !== undefined && q.category !== '') {
+            if (!isCategory(q.category)) {
+                return reply.status(400).send({ error: `category must be one of: ${CATEGORIES.map((category) => category.slug).join(', ')}.` });
+            }
+
+            parameters.category = q.category;
+        }
+
         if (q.sort !== undefined) {
             if (typeof q.sort !== 'string' || !SORTS.has(q.sort)) {
                 return reply.status(400).send({ error: 'sort must be one of: newest, name, flagged, rating.' });
@@ -143,6 +152,9 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
 
         return listTemplates(db, parameters);
     });
+
+    // The categories and how many live templates each holds. "All" is the whole list, with no category filter.
+    app.get('/api/categories', async () => categoryCounts(db));
 
     app.get('/api/templates/:identifier', async (request, reply) => {
         const { identifier } = request.params as { identifier: string };
@@ -159,14 +171,14 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
         '/api/templates',
         { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
         async (request, reply) => {
-            const body = (request.body ?? {}) as { template?: unknown; publisher?: unknown };
+            const body = (request.body ?? {}) as { template?: unknown; publisher?: unknown; categories?: unknown };
 
             if (body.template === undefined) {
                 return reply.status(400).send({ error: 'Request body must include a "template".' });
             }
 
             const publisher = typeof body.publisher === 'string' && body.publisher.trim() ? body.publisher.trim() : 'anonymous';
-            const result = await publishTemplate(db, body.template, publisher);
+            const result = await publishTemplate(db, body.template, publisher, body.categories);
 
             return reply.status(result.created ? 201 : 200).send(result);
         },

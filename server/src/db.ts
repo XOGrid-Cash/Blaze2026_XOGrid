@@ -23,6 +23,11 @@ export interface TemplatesTable {
     removed_reason: string | null;
 }
 
+export interface TemplateCategoriesTable {
+    identifier: string;
+    category: string;
+}
+
 export interface AuditReportsTable {
     id: Generated<number>;
     identifier: string;
@@ -91,6 +96,7 @@ export interface ModerationLogTable {
 
 export interface DatabaseSchema {
     templates: TemplatesTable;
+    template_categories: TemplateCategoriesTable;
     audit_reports: AuditReportsTable;
     flags: FlagsTable;
     reviews: ReviewsTable;
@@ -206,6 +212,14 @@ export async function migrate(db: Db): Promise<void> {
         .addColumn('created_at', 'text', (c) => c.notNull())
         .addColumn('removed', 'integer', (c) => c.notNull().defaultTo(0))
         .addColumn('removed_reason', 'text')
+        .execute();
+
+    await db.schema
+        .createTable('template_categories')
+        .ifNotExists()
+        .addColumn('identifier', 'text', (c) => c.notNull().references('templates.identifier'))
+        .addColumn('category', 'text', (c) => c.notNull())
+        .addPrimaryKeyConstraint('template_categories_pk', ['identifier', 'category'])
         .execute();
 
     await db.schema
