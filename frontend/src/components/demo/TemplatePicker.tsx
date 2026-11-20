@@ -3,16 +3,16 @@ import { Search, Zap } from "lucide-react";
 
 import { listTemplates, type Summary } from "../../hub/api";
 
-// A searchable strip of registry templates for the Demo. The Claim-Code Voucher is pinned first because it is the one
-// that runs live.
+// A searchable strip of registry templates for the Demo. The templates that run live (the Claim-Code Voucher, then
+// Drip Mine) are pinned first.
 
 export default function TemplatePicker({
   selected,
-  liveIdentifier,
+  liveIdentifiers,
   onSelect,
 }: {
   selected: string;
-  liveIdentifier: string;
+  liveIdentifiers: string[];
   onSelect: (identifier: string) => void;
 }) {
   const [items, setItems] = useState<Summary[]>([]);
@@ -41,8 +41,14 @@ export default function TemplatePicker({
       ? items.filter((item) => `${item.name} ${item.description}`.toLowerCase().includes(needle))
       : items;
 
-    return [...matching].sort((a, b) => Number(b.identifier === liveIdentifier) - Number(a.identifier === liveIdentifier));
-  }, [items, query, liveIdentifier]);
+    const rank = (identifier: string) => {
+      const position = liveIdentifiers.indexOf(identifier);
+
+      return position < 0 ? liveIdentifiers.length : position;
+    };
+
+    return [...matching].sort((a, b) => rank(a.identifier) - rank(b.identifier));
+  }, [items, query, liveIdentifiers]);
 
   return (
     <section className="relative z-10 border-b border-white/[0.07] bg-[#05070B]/90 px-4 py-4 backdrop-blur sm:px-8">
@@ -50,7 +56,7 @@ export default function TemplatePicker({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-orange-300">Try a template</p>
-            <p className="mt-1 text-xs text-gray-500">Pick anything from the registry. The voucher runs live; the rest open as guided walk-throughs.</p>
+            <p className="mt-1 text-xs text-gray-500">Pick anything from the registry. The voucher and Drip Mine run live; the rest open as guided walk-throughs.</p>
           </div>
 
           <div className="relative w-full sm:w-64">
@@ -70,7 +76,7 @@ export default function TemplatePicker({
 
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {shown.map((item) => {
-            const live = item.identifier === liveIdentifier;
+            const live = liveIdentifiers.includes(item.identifier);
 
             return (
               <button

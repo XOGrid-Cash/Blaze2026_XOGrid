@@ -148,3 +148,7 @@ vite.config.ts.timestamp-*
 # Turbo Repo
 .turbo
 
+HANDOFF_FULL.md
+dump_codebase.py
+
+xogrid-dump.txt

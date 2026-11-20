@@ -28,6 +28,8 @@ import { useWallet } from '../hub/WalletContext';
 import { Chain } from '../voucher/chain';
 import TemplateGuide from '../components/demo/TemplateGuide';
 import TemplatePicker from '../components/demo/TemplatePicker';
+import { RunDripMine } from '../components/hub/RunDripMine';
+import { DRIP_MINE_TEMPLATE_IDENTIFIER } from '../hub/run';
 
 import {
     CLAIM_FEE_SATOSHIS,
@@ -1286,7 +1288,7 @@ function VoucherDemo() {
         </main>
     );
 }
-/** The Demo page: pick any registry template. The Claim-Code Voucher runs live; every other template opens as a guide. */
+/** The Demo page: pick any registry template. The Claim-Code Voucher and Drip Mine run live; every other template opens as a guide. */
 export default function Demo() {
     const [selected, setSelected] = useState<string>(VOUCHER_TEMPLATE_IDENTIFIER);
 
@@ -1294,7 +1296,7 @@ export default function Demo() {
         <div className="min-h-screen bg-[#05070B]">
             <TemplatePicker
                 selected={selected}
-                liveIdentifier={VOUCHER_TEMPLATE_IDENTIFIER}
+                liveIdentifiers={[VOUCHER_TEMPLATE_IDENTIFIER, DRIP_MINE_TEMPLATE_IDENTIFIER]}
                 onSelect={setSelected}
             />
 
@@ -1302,6 +1304,11 @@ export default function Demo() {
                 <VoucherDemo />
             ) : (
                 <main className="mx-auto max-w-5xl px-4 py-10 text-white sm:px-8">
+                    {selected === DRIP_MINE_TEMPLATE_IDENTIFIER ? (
+                        <div className="mb-8">
+                            <RunDripMine />
+                        </div>
+                    ) : null}
                     <TemplateGuide identifier={selected} />
                 </main>
             )}
