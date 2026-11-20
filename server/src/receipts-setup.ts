@@ -9,6 +9,14 @@ import type { ReceiptConfig } from './review-chain.js';
  * ELECTRUM_CHIPNET are "host:port" (TLS) servers; ELECTRUM_INSECURE_TLS=1 accepts self-signed certificates.
  */
 export async function buildReceiptConfig(database: Db, env: NodeJS.ProcessEnv): Promise<ReceiptConfig | undefined> {
+    // Shelved for the submission: receipts stay off unless RECEIPTS=1. With no config the page hides the step and
+    // the receipt routes answer 503. Reviews themselves are unaffected.
+    if (env.RECEIPTS !== '1') {
+        console.log('On-chain receipts are switched off. Set RECEIPTS=1 to turn them on.');
+
+        return undefined;
+    }
+
     const identity = await resolveReviewIdentity(database, env.REVIEW_IDENTITY_LABEL);
 
     if (!identity) {
