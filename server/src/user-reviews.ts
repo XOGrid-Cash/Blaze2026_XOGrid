@@ -5,6 +5,7 @@ import { verifyChallengeTransaction } from './auth/challenge-transaction.js';
 import { recoverSigner } from './auth/signed-message.js';
 import type { Db } from './db.js';
 import { RegistryError } from './registry.js';
+import { resolveNames } from './user-names.js';
 
 export const MIN_RATING = 1;
 export const MAX_RATING = 5;
@@ -139,6 +140,8 @@ export interface UserReview {
     id: number;
     reviewerAddress: string;
     reviewer: string;
+    /** The name an admin registered for the reviewer's address, or null. */
+    reviewerName: string | null;
     rating: number;
     body: string;
     createdAt: string;
@@ -211,12 +214,14 @@ export async function listUserReviews(db: Db, identifier: string, page = 1, page
     const size = Math.min(Math.max(pageSize, 1), 50);
     const current = Math.max(page, 1);
     const rows = await db.selectFrom('user_reviews').selectAll().where('identifier', '=', identifier).where('hidden', '=', 0).orderBy('id', 'desc').execute();
+    const pageRows = rows.slice((current - 1) * size, current * size);
+    const names = await resolveNames(db, pageRows.map((row) => row.reviewer));
 
     return {
-        items: rows.slice((current - 1) * size, current * size).map((row) => {
+        items: pageRows.map((row) => {
             const address = addressOfPublicKey(row.reviewer);
 
-            return { id: row.id, reviewerAddress: address, reviewer: shorten(address), rating: row.rating, body: row.body, createdAt: row.created_at, receipt: receiptOf(row) };
+            return { id: row.id, reviewerAddress: address, reviewer: shorten(address), reviewerName: names.get(row.reviewer) ?? null, rating: row.rating, body: row.body, createdAt: row.created_at, receipt: receiptOf(row) };
         }),
         total: rows.length,
         page: current,

@@ -115,7 +115,8 @@ function Explore() {
   const filteredTemplates = items.map((item) => ({
     id: item.identifier,
     name: item.name,
-    category: item.publisher,
+    category: item.publisherName ?? item.publisher,
+    publisherAddress: item.publisherName ? item.publisher : undefined,
     badge: badgeLabel[item.badge],
     updated: formatDate(item.createdAt),
     rating: item.averageRating,
@@ -404,7 +405,7 @@ function Explore() {
                   type="text"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search by template name or description..."
+                  placeholder="Search by template name, description or publisher..."
                   className="explore-input w-full rounded-2xl border border-white/[0.08] bg-[#080a10] py-4 pl-12 pr-12 text-sm text-white outline-none placeholder:text-slate-600"
                 />
 
@@ -520,7 +521,7 @@ function Explore() {
                       </span>
                     </div>
 
-                    <p className="mb-2 text-xs font-medium uppercase tracking-[.15em] text-violet-300">
+                    <p className="mb-2 text-xs font-medium uppercase tracking-[.15em] text-violet-300" title={template.publisherAddress}>
                       {template.category}
                     </p>
 

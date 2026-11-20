@@ -5,6 +5,7 @@ import { deriveBadge, type Badge } from './badges.js';
 import { loadCategories, normalizeCategories, setCategoriesIfEmpty } from './categories.js';
 import type { Db } from './db.js';
 import { loadRatings, type RatingStats } from './user-reviews.js';
+import { resolveNames } from './user-names.js';
 import { evaluatePolicy, type Policy, type PolicyDecision } from './policy.js';
 
 export class RegistryError extends Error {
@@ -28,6 +29,8 @@ export interface TemplateSummary {
     name: string;
     description: string;
     publisher: string;
+    /** The name an admin registered for the publisher's address, or null. */
+    publisherName: string | null;
     createdAt: string;
     badge: Badge;
     openFlags: number;
@@ -211,9 +214,11 @@ interface Enrichment {
     openFlags: Map<string, number>;
     ratings: Map<string, RatingStats>;
     categories: Map<string, string[]>;
+    /** Registered display names, keyed by publisher address. */
+    names: Map<string, string>;
 }
 
-async function loadEnrichment(db: Db): Promise<Enrichment> {
+async function loadEnrichment(db: Db, publishers: Iterable<string>): Promise<Enrichment> {
     const reports = new Map<string, { checkerVersion: string; results: CheckResult[] }>();
     const reportRows = await db.selectFrom('audit_reports').selectAll().orderBy('id', 'asc').execute();
 
@@ -234,7 +239,7 @@ async function loadEnrichment(db: Db): Promise<Enrichment> {
         openFlags.set(row.identifier, (openFlags.get(row.identifier) ?? 0) + 1);
     }
 
-    return { reports, reviews, openFlags, ratings: await loadRatings(db), categories: await loadCategories(db) };
+    return { reports, reviews, openFlags, ratings: await loadRatings(db), categories: await loadCategories(db), names: await resolveNames(db, publishers) };
 }
 
 type TemplateRow = {
@@ -256,6 +261,7 @@ function toSummary(row: TemplateRow, enrichment: Enrichment): TemplateSummary {
         name: row.name,
         description: row.description,
         publisher: row.publisher,
+        publisherName: enrichment.names.get(row.publisher) ?? null,
         createdAt: row.created_at,
         badge: deriveBadge({
             hasReport: report !== undefined,
@@ -278,13 +284,13 @@ const SUMMARY_COLUMNS = ['identifier', 'name', 'description', 'publisher', 'crea
 export async function getSummary(db: Db, identifier: string): Promise<TemplateSummary | undefined> {
     const row = await db.selectFrom('templates').select(SUMMARY_COLUMNS).where('identifier', '=', identifier).executeTakeFirst();
 
-    return row ? toSummary(row, await loadEnrichment(db)) : undefined;
+    return row ? toSummary(row, await loadEnrichment(db, [row.publisher])) : undefined;
 }
 
 /** Lists and searches templates. Filtering and sorting happen in memory, which is fine at hackathon scale. */
 export async function listTemplates(db: Db, parameters: ListParameters = {}): Promise<ListResult> {
     const rows = await db.selectFrom('templates').select(SUMMARY_COLUMNS).execute();
-    const enrichment = await loadEnrichment(db);
+    const enrichment = await loadEnrichment(db, rows.map((row) => row.publisher));
     const query = parameters.query?.trim().toLowerCase();
     let items = rows.map((row) => toSummary(row, enrichment));
 
@@ -297,6 +303,7 @@ export async function listTemplates(db: Db, parameters: ListParameters = {}): Pr
             (item) =>
                 item.name.toLowerCase().includes(query) ||
                 item.description.toLowerCase().includes(query) ||
+                (item.publisherName?.toLowerCase().includes(query) ?? false) ||
                 item.identifier.startsWith(query),
         );
     }
@@ -341,7 +348,7 @@ export async function getTemplateDetail(db: Db, identifier: string): Promise<Tem
         return undefined;
     }
 
-    const enrichment = await loadEnrichment(db);
+    const enrichment = await loadEnrichment(db, [row.publisher]);
     const summary = toSummary(row, enrichment);
     const report = enrichment.reports.get(identifier);
     const flagRows = await db.selectFrom('flags').selectAll().where('identifier', '=', identifier).orderBy('id', 'desc').execute();
@@ -410,11 +417,21 @@ export async function addFlag(db: Db, identifier: string, reason: unknown, repor
 
 export async function getSpotlight(db: Db): Promise<(TemplateSummary & { blurb: string })[]> {
     const rows = await db.selectFrom('spotlight').selectAll().orderBy('position', 'asc').execute();
-    const enrichment = await loadEnrichment(db);
-    const items: (TemplateSummary & { blurb: string })[] = [];
+    const templates = new Map<string, TemplateRow>();
 
     for (const spot of rows) {
         const row = await db.selectFrom('templates').select(SUMMARY_COLUMNS).where('identifier', '=', spot.identifier).executeTakeFirst();
+
+        if (row) {
+            templates.set(spot.identifier, row);
+        }
+    }
+
+    const enrichment = await loadEnrichment(db, [...templates.values()].map((row) => row.publisher));
+    const items: (TemplateSummary & { blurb: string })[] = [];
+
+    for (const spot of rows) {
+        const row = templates.get(spot.identifier);
 
         if (row && row.removed === 0) {
             items.push({ ...toSummary(row, enrichment), blurb: spot.blurb });

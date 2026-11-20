@@ -10,6 +10,7 @@ import {
   LogOut,
   MessageSquare,
   ShieldCheck,
+  Users,
   Wallet,
 } from "lucide-react";
 
@@ -39,17 +40,26 @@ import {
   type AdminFlag,
   type AdminSummary,
   type AdminUserReview,
+  addNamedUserAddresses,
+  adminUsers,
+  createNamedUser,
+  deleteNamedUser,
+  removeNamedUserAddress,
+  renameNamedUser,
+  splitAddresses,
+  type NamedUser,
 } from "../hub/admin";
 import { publicKeyHex, signWithWallet } from "../hub/wallet";
 import { useWallet } from "../hub/WalletContext";
 
-type Tab = "overview" | "flags" | "templates" | "reviews";
+type Tab = "overview" | "flags" | "templates" | "reviews" | "users";
 
 const TABS: { id: Tab; label: string; icon: typeof Activity }[] = [
   { id: "overview", label: "Overview", icon: Activity },
   { id: "flags", label: "Community reports", icon: Flag },
   { id: "templates", label: "Template registry", icon: Blocks },
   { id: "reviews", label: "Community reviews", icon: MessageSquare },
+  { id: "users", label: "Named users", icon: Users },
 ];
 
 const field =
@@ -396,6 +406,7 @@ function Portal({ token, onLogout, onExpired }: { token: string; onLogout: () =>
         {tab === "flags" && <FlagsTab token={token} version={version} act={act} onError={handleError} />}
         {tab === "templates" && <TemplatesTab token={token} version={version} act={act} onError={handleError} />}
         {tab === "reviews" && <ReviewsTab token={token} version={version} act={act} onError={handleError} />}
+        {tab === "users" && <UsersTab token={token} version={version} act={act} onError={handleError} />}
       </div>
     </div>
   );
@@ -705,7 +716,15 @@ function ReviewsTab({ token, version, act, onError }: ActProps) {
                 {review.identifier.slice(0, 12)}…
               </Link>
               <span className="text-gray-500">{when(review.created_at)}</span>
-              <span className="font-mono text-[10px] text-gray-600 2xl:text-xs">{review.reviewer.slice(0, 10)}…</span>
+              {review.reviewerName ? (
+                <span className="font-medium text-gray-300" title={review.reviewerAddress}>
+                  {review.reviewerName}
+                </span>
+              ) : (
+                <span className="font-mono text-[10px] text-gray-600 2xl:text-xs" title={review.reviewerAddress}>
+                  {review.reviewerAddress.slice(0, 22)}…
+                </span>
+              )}
               {review.hidden ? <span className="rounded-md border border-rose-500/20 bg-rose-500/10 px-2 py-1 text-[10px] uppercase tracking-wider text-rose-300 2xl:px-3 2xl:py-1.5 2xl:text-xs">hidden</span> : null}
             </div>
 
@@ -740,6 +759,167 @@ function ReviewsTab({ token, version, act, onError }: ActProps) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function UsersTab({ token, version, act, onError }: ActProps) {
+  const { data, error } = useTabData<{ items: NamedUser[] }>(() => adminUsers(token), [version], onError);
+  const [name, setName] = useState("");
+  const [addresses, setAddresses] = useState("");
+
+  if (error) return <ErrorLine message={error} />;
+  if (!data) return <p className="text-sm text-gray-500 2xl:text-base">Loading...</p>;
+
+  const create = () =>
+    void act(() => createNamedUser(token, name.trim(), splitAddresses(addresses)), `Added ${name.trim()}.`).then((ok) => {
+      if (ok) {
+        setName("");
+        setAddresses("");
+      }
+    });
+
+  return (
+    <div className="space-y-3 2xl:space-y-4">
+      <p className="text-xs text-gray-500 2xl:text-sm">
+        Give a publisher or reviewer a display name. Wherever one of their addresses appears on submitted templates and reviews, the name shows instead,
+        with the address on hover. Names are public, and Explore search finds templates by publisher name.
+      </p>
+
+      <div className={card}>
+        <h2 className="text-sm font-semibold text-white 2xl:text-base">Add a user</h2>
+        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] 2xl:mt-4 2xl:gap-3">
+          <input
+            aria-label="Display name"
+            className={`${field} 2xl:px-4 2xl:py-3 2xl:text-sm`}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Display name"
+            maxLength={64}
+          />
+          <textarea
+            aria-label="Addresses"
+            rows={2}
+            className={`${field} resize-y font-mono 2xl:px-4 2xl:py-3 2xl:text-sm`}
+            value={addresses}
+            onChange={(event) => setAddresses(event.target.value)}
+            placeholder="bitcoincash:q… or public key, one per line"
+          />
+          <button type="button" className={`${smallButton} self-start 2xl:px-4 2xl:py-2 2xl:text-sm`} disabled={name.trim().length < 2} onClick={create}>
+            Add user
+          </button>
+        </div>
+      </div>
+
+      {data.items.length === 0 ? (
+        <p className="text-sm text-gray-500 2xl:text-base">No named users yet.</p>
+      ) : (
+        data.items.map((user) => <NamedUserCard key={`${user.id}-${user.name}`} user={user} token={token} act={act} />)
+      )}
+    </div>
+  );
+}
+
+function NamedUserCard({ user, token, act }: { user: NamedUser; token: string; act: ActProps["act"] }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(user.name);
+  const [adding, setAdding] = useState("");
+
+  return (
+    <div className={card}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {editing ? (
+          <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+            <input
+              aria-label={`New name for ${user.name}`}
+              className={`${field} max-w-xs 2xl:px-4 2xl:py-3 2xl:text-sm`}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={64}
+            />
+            <button
+              type="button"
+              className={`${smallButton} 2xl:px-4 2xl:py-2 2xl:text-sm`}
+              disabled={name.trim().length < 2 || name.trim() === user.name}
+              onClick={() => void act(() => renameNamedUser(token, user.id, name.trim()), "Name updated.").then((ok) => ok && setEditing(false))}
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              className={`${smallButton} 2xl:px-4 2xl:py-2 2xl:text-sm`}
+              onClick={() => {
+                setName(user.name);
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="min-w-0">
+            <p className="break-words text-sm font-semibold text-white 2xl:text-base">{user.name}</p>
+            <p className="mt-0.5 text-[11px] text-gray-500 2xl:text-xs">
+              Added {when(user.createdAt)} by {user.createdBy}
+            </p>
+          </div>
+        )}
+        {!editing ? (
+          <div className="flex shrink-0 gap-2">
+            <button type="button" className={`${smallButton} 2xl:px-4 2xl:py-2 2xl:text-sm`} onClick={() => setEditing(true)}>
+              Rename
+            </button>
+            <button
+              type="button"
+              className={`${smallButton} 2xl:px-4 2xl:py-2 2xl:text-sm`}
+              onClick={() => {
+                if (!window.confirm(`Delete "${user.name}"? Their addresses will show as plain addresses again.`)) return;
+
+                void act(() => deleteNamedUser(token, user.id), `Deleted ${user.name}.`);
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <ul className="mt-3 space-y-1.5 2xl:mt-4">
+        {user.addresses.length === 0 ? <li className="text-xs text-gray-500">No addresses yet.</li> : null}
+        {user.addresses.map((entry) => (
+          <li key={entry.address} className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
+            <span className="min-w-0 break-all font-mono text-[11px] text-gray-300 2xl:text-xs">{entry.address}</span>
+            <button
+              type="button"
+              className={`${smallButton} shrink-0 px-2 py-1 text-[11px]`}
+              aria-label={`Remove ${entry.address} from ${user.name}`}
+              onClick={() => void act(() => removeNamedUserAddress(token, user.id, entry.address), "Address removed.")}
+            >
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row 2xl:mt-4 2xl:gap-3">
+        <input
+          aria-label={`Add address to ${user.name}`}
+          className={`${field} font-mono 2xl:px-4 2xl:py-3 2xl:text-sm`}
+          value={adding}
+          onChange={(event) => setAdding(event.target.value)}
+          placeholder="Add address(es)"
+        />
+        <button
+          type="button"
+          className={`${smallButton} shrink-0 2xl:px-4 2xl:py-2 2xl:text-sm`}
+          disabled={splitAddresses(adding).length === 0}
+          onClick={() =>
+            void act(() => addNamedUserAddresses(token, user.id, splitAddresses(adding)), "Address added.").then((ok) => ok && setAdding(""))
+          }
+        >
+          Add
+        </button>
+      </div>
     </div>
   );
 }

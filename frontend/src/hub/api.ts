@@ -16,6 +16,8 @@ export interface Summary {
   name: string;
   description: string;
   publisher: string;
+  /** Display name an admin registered for the publisher's address, or null. */
+  publisherName: string | null;
   createdAt: string;
   badge: Badge;
   openFlags: number;
@@ -90,6 +92,8 @@ export interface UserReview {
   id: number;
   reviewerAddress: string;
   reviewer: string;
+  /** Display name an admin registered for the reviewer's address, or null. */
+  reviewerName: string | null;
   rating: number;
   body: string;
   createdAt: string;

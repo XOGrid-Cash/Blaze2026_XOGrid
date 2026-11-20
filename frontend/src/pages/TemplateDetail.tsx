@@ -108,7 +108,9 @@ function TemplateDetail() {
                     <FileCode2 size={26} />
                   </div>
                   <div>
-                    <p className="text-xs font-medium uppercase tracking-[.15em] text-violet-300">{detail.publisher}</p>
+                    <p className="text-xs font-medium uppercase tracking-[.15em] text-violet-300" title={detail.publisherName ? detail.publisher : undefined}>
+                      {detail.publisherName ?? detail.publisher}
+                    </p>
                     <h1 className="text-3xl font-bold tracking-tight 2xl:text-4xl">{detail.name}</h1>
                     {detail.categories?.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -303,8 +305,8 @@ function TemplateDetail() {
                       <span className="text-xs text-slate-400">{when(review.createdAt)}</span>
                     </div>
                     <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-200">{review.body}</p>
-                    <p className="mt-2 font-mono text-xs text-slate-400" title={review.reviewerAddress}>
-                      {review.reviewer}
+                    <p className={`mt-2 text-xs text-slate-400 ${review.reviewerName ? "font-medium" : "font-mono"}`} title={review.reviewerAddress}>
+                      {review.reviewerName ?? review.reviewer}
                     </p>
                     {review.receipt && (
                       <p className="mt-1 text-xs">

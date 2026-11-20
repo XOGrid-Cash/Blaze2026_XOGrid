@@ -78,6 +78,23 @@ export interface AdminsTable {
     added_at: string;
 }
 
+/** A person outside the moderator team (publisher, reviewer) whose wallet addresses an admin has given a name. */
+export interface UsersTable {
+    id: Generated<number>;
+    name: string;
+    created_at: string;
+    created_by: string;
+}
+
+export interface UserAddressesTable {
+    /** The address or public key as the admin entered it. */
+    address: string;
+    /** Hex hash160 of the key, so a public key and every prefix of the same P2PKH address match one row. */
+    match_key: string;
+    user_id: number;
+    added_at: string;
+}
+
 export interface SpotlightTable {
     identifier: string;
     blurb: string;
@@ -102,6 +119,8 @@ export interface DatabaseSchema {
     reviews: ReviewsTable;
     user_reviews: UserReviewsTable;
     admins: AdminsTable;
+    users: UsersTable;
+    user_addresses: UserAddressesTable;
     spotlight: SpotlightTable;
     moderation_log: ModerationLogTable;
 }
@@ -298,6 +317,24 @@ export async function migrate(db: Db): Promise<void> {
         .addColumn('identifier', 'text')
         .addColumn('note', 'text', (c) => c.notNull())
         .addColumn('created_at', 'text', (c) => c.notNull())
+        .execute();
+
+    await db.schema
+        .createTable('users')
+        .ifNotExists()
+        .addColumn('id', idType, idColumn)
+        .addColumn('name', 'text', (c) => c.notNull().unique())
+        .addColumn('created_at', 'text', (c) => c.notNull())
+        .addColumn('created_by', 'text', (c) => c.notNull())
+        .execute();
+
+    await db.schema
+        .createTable('user_addresses')
+        .ifNotExists()
+        .addColumn('match_key', 'text', (c) => c.primaryKey())
+        .addColumn('address', 'text', (c) => c.notNull())
+        .addColumn('user_id', 'integer', (c) => c.notNull().references('users.id').onDelete('cascade'))
+        .addColumn('added_at', 'text', (c) => c.notNull())
         .execute();
 
     await upgradeSchema(db);

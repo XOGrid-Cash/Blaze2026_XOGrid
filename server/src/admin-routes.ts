@@ -3,7 +3,8 @@ import { AdminAuth, type AdminSession, type LoginProof } from './admin.js';
 import { buildWalletSignRequest } from './auth/challenge-transaction.js';
 import { normalizeCategories, setCategories } from './categories.js';
 import type { Db } from './db.js';
-import { setReviewHidden } from './user-reviews.js';
+import { addressOfPublicKey, setReviewHidden } from './user-reviews.js';
+import { addUserAddresses, createUser, deleteUser, listUsers, removeUserAddress, renameUser, resolveNames } from './user-names.js';
 import { getSummary, listTemplates, RegistryError, setSpotlight } from './registry.js';
 
 declare module 'fastify' {
@@ -279,7 +280,69 @@ export function registerAdminRoutes(app: FastifyInstance, db: Db, auth: AdminAut
             query = query.where('hidden', '=', Number(q.hidden));
         }
 
-        return { items: await query.execute() };
+        const items = await query.execute();
+        const names = await resolveNames(db, items.map((row) => row.reviewer));
+
+        return {
+            items: items.map((row) => ({ ...row, reviewerAddress: addressOfPublicKey(row.reviewer), reviewerName: names.get(row.reviewer) ?? null })),
+        };
+    });
+
+    // ----- named users: display names for outside publishers and reviewers -----
+
+    const userId = (request: FastifyRequest): number => {
+        const id = Number((request.params as { id: string }).id);
+
+        if (!Number.isInteger(id) || id <= 0) {
+            throw new RegistryError('User not found.', 404);
+        }
+
+        return id;
+    };
+
+    app.get('/api/admin/users', { preHandler: requireAdmin }, async () => ({ items: await listUsers(db) }));
+
+    app.post('/api/admin/users', { preHandler: requireAdmin }, async (request, reply) => {
+        const body = (request.body ?? {}) as { name?: unknown; addresses?: unknown };
+        const user = await createUser(db, body.name, body.addresses ?? [], request.admin!.label);
+
+        await logAction(db, request.admin!.label, 'user-create', null, `${user.name} (${user.addresses.length} address${user.addresses.length === 1 ? '' : 'es'})`);
+
+        return reply.status(201).send(user);
+    });
+
+    app.put('/api/admin/users/:id', { preHandler: requireAdmin }, async (request) => {
+        const { before, user } = await renameUser(db, userId(request), (request.body as { name?: unknown } | undefined)?.name);
+
+        await logAction(db, request.admin!.label, 'user-rename', null, `${before} -> ${user.name}`);
+
+        return user;
+    });
+
+    app.post('/api/admin/users/:id/addresses', { preHandler: requireAdmin }, async (request) => {
+        const addresses = (request.body as { addresses?: unknown } | undefined)?.addresses;
+        const user = await addUserAddresses(db, userId(request), addresses);
+
+        await logAction(db, request.admin!.label, 'user-address-add', null, `${user.name}: ${Array.isArray(addresses) ? addresses.join(', ') : ''}`);
+
+        return user;
+    });
+
+    app.delete('/api/admin/users/:id/addresses/:address', { preHandler: requireAdmin }, async (request) => {
+        const { address } = request.params as { address: string };
+        const user = await removeUserAddress(db, userId(request), address);
+
+        await logAction(db, request.admin!.label, 'user-address-remove', null, `${user.name}: ${address}`);
+
+        return user;
+    });
+
+    app.delete('/api/admin/users/:id', { preHandler: requireAdmin }, async (request) => {
+        const user = await deleteUser(db, userId(request));
+
+        await logAction(db, request.admin!.label, 'user-delete', null, user.name);
+
+        return { id: user.id, deleted: true };
     });
 
     app.post('/api/admin/user-reviews/:id/hide', { preHandler: requireAdmin }, async (request, reply) => {

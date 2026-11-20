@@ -83,7 +83,10 @@ export interface AdminFlag {
 export interface AdminUserReview {
   id: number;
   identifier: string;
+  /** Public key hex. */
   reviewer: string;
+  reviewerAddress: string;
+  reviewerName: string | null;
   rating: number;
   body: string;
   created_at: string;
@@ -190,3 +193,32 @@ export const hideUserReview = (token: string, id: number, reason: string) =>
 
 export const unhideUserReview = (token: string, id: number) =>
   call(token, `/api/admin/user-reviews/${id}/unhide`, "POST", {});
+
+// ----- named users (display names for outside publishers and reviewers) -----
+
+export interface NamedUser {
+  id: number;
+  name: string;
+  createdAt: string;
+  createdBy: string;
+  addresses: { address: string; addedAt: string }[];
+}
+
+export const adminUsers = (token: string) => call<{ items: NamedUser[] }>(token, "/api/admin/users");
+
+export const createNamedUser = (token: string, name: string, addresses: string[]) =>
+  call<NamedUser>(token, "/api/admin/users", "POST", { name, addresses });
+
+export const renameNamedUser = (token: string, id: number, name: string) =>
+  call<NamedUser>(token, `/api/admin/users/${id}`, "PUT", { name });
+
+export const addNamedUserAddresses = (token: string, id: number, addresses: string[]) =>
+  call<NamedUser>(token, `/api/admin/users/${id}/addresses`, "POST", { addresses });
+
+export const removeNamedUserAddress = (token: string, id: number, address: string) =>
+  call<NamedUser>(token, `/api/admin/users/${id}/addresses/${encodeURIComponent(address)}`, "DELETE");
+
+export const deleteNamedUser = (token: string, id: number) => call(token, `/api/admin/users/${id}`, "DELETE");
+
+/** Splits pasted text (commas, spaces or new lines) into address entries. */
+export const splitAddresses = (text: string): string[] => text.split(/[\s,]+/).map((part) => part.trim()).filter(Boolean);

@@ -27,7 +27,7 @@ All responses are JSON. Errors are `{ "error": "message" }` with a 4xx status. P
 | Method and path | What it does |
 |---|---|
 | `GET /api/health` | `{ ok: true }` |
-| `GET /api/templates` | List. Query: `query` (text, max 100), `badge` (`unchecked`, `auto-checked`, `reviewed`), `sort` (`newest`, `name`, `flagged`, `rating`), `page` (from 1), `pageSize` (1 to 50, default 12). Returns `{ items: Summary[], total, page, pageSize }` |
+| `GET /api/templates` | List. Query: `query` (text, max 100; matches name, description, identifier prefix, or the publisher's registered name), `badge` (`unchecked`, `auto-checked`, `reviewed`), `sort` (`newest`, `name`, `flagged`, `rating`), `page` (from 1), `pageSize` (1 to 50, default 12). Returns `{ items: Summary[], total, page, pageSize }` |
 | `GET /api/templates/:identifier` | Detail: the `Summary` fields plus `template`, `auditReport`, `actions`, `roles`, `flags`, `reviews`. 404 if unknown |
 | `GET /api/templates/:identifier/raw` | The template exactly as an XO tool expects it, immutable and cacheable. 404 unknown, 410 removed |
 | `POST /api/templates` | Publish. Body `{ template, publisher? }`. 201 if new, 200 if it already existed. Returns `{ identifier, created, badge }`. 400 invalid template, 413 over 256 KB. Rate limited to 10 per minute |
@@ -43,13 +43,15 @@ Any wallet can review a template. A review is a rating (whole number 1 to 5) and
 
 | Call | What it does |
 | --- | --- |
-| `GET /api/templates/:id/reviews?page&pageSize` | `{ items: [{ id, reviewerAddress, reviewer (shortened), rating, body, createdAt }], total, page, pageSize, stats: { count, average, distribution } }` |
+| `GET /api/templates/:id/reviews?page&pageSize` | `{ items: [{ id, reviewerAddress, reviewer (shortened), reviewerName (or null), rating, body, createdAt }], total, page, pageSize, stats: { count, average, distribution } }` |
 | `POST /api/templates/:id/reviews/challenge` body `{ rating, body, publicKey? }` | Stores the review on the server and returns `{ nonce, expiresAt, message, review, walletSignRequest? }`. `walletSignRequest` is present when `publicKey` (compressed, hex) was sent |
 | `POST /api/templates/:id/reviews` body `{ nonce, proof }` | `proof` is `{ type: 'transaction', signedTransaction }` or `{ type: 'message', signature }`. Publishes exactly the stored review. 201 `{ id, reviewerAddress, rating, body }` |
 
 Flow: collect rating and text, send the challenge call with the wallet's public key, ask the wallet to sign `walletSignRequest` (same `signTransaction` path as admin login, `broadcast: false`), then post the proof. The text cannot change after the challenge. Errors: 400 bad input, 401 proof failed (start again, the nonce is single-use and lasts 5 minutes), 404 unknown template, 409 already reviewed or template removed.
 
 Limits to be honest about in the UI copy: a review proves a wallet signed it, not that the person used the template. Anyone can make a new wallet. Moderators can hide a review (`GET /api/admin/user-reviews`, `POST /api/admin/user-reviews/:id/hide` with `{ reason }`, `POST .../unhide`). Moderator reviews (the `reviews` array and the `reviewed` badge) are separate from community reviews.
+
+Named users: moderators can give an outside publisher or reviewer a display name and register one or more of their addresses (P2PKH CashAddress with or without prefix, or a public key; all forms of one wallet match). Summaries carry `publisherName` and community reviews carry `reviewerName`, each null when nothing is registered; show the name in place of the address and keep the address on hover. Admin routes: `GET /api/admin/users`, `POST /api/admin/users` `{ name, addresses }`, `PUT /api/admin/users/:id` `{ name }`, `POST /api/admin/users/:id/addresses` `{ addresses }`, `DELETE /api/admin/users/:id/addresses/:address`, `DELETE /api/admin/users/:id`. A name is unique (case-insensitive) and an address can belong to one user only (409 otherwise).
 
 ### Identifiers and badges
 

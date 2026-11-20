@@ -662,7 +662,7 @@ function Dashboard() {
                       </div>
 
                       <p className="mt-1 truncate text-[11px] text-white/45">
-                        by {template.publisher === address ? "you" : shortenAddress(template.publisher)}
+                        by {template.publisher === address ? "you" : template.publisherName ?? shortenAddress(template.publisher)}
                       </p>
 
                       <span className="mt-2 inline-flex rounded-md border border-white/[0.07] bg-white/[0.025] px-2 py-1 text-[9px] text-white/40">
