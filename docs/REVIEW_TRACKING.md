@@ -1,6 +1,6 @@
 # Decision record: how XOGrid tracks reviews on-chain
 
-Status: **decided in discussion on 2026-11-18; receipt builder and parser built, reader and UI not yet.** Written 2026-11-19 for the BCH BLAZE 2026 judges and for whoever builds it.
+Status: **decided on 2026-11-18 and built on 2026-11-19/20** (server, page and tests). Chipnet and mainnet runs with a real wallet are reported separately; this document does not claim them. Written for the BCH BLAZE 2026 judges and for whoever continues the work.
 
 ## 1. Question
 
@@ -55,11 +55,23 @@ That is 70 data bytes. The standard OP_RETURN limit on Bitcoin Cash is **223 byt
 - **Text is off-chain.** Only a hash is on-chain, so the text can be lost, and the hash proves only that *this* text was committed to by *this* key.
 - **A reviewer key is not a person.** It shows control of a key, not a real identity.
 - **Unconfirmed reviews** should show as pending and not count until confirmed (reorg protection).
-- **Review address custody (open).** Someone on the team must hold the key if we ever want to sweep the dust. Recommendation: a team-held address; the dust is not the point.
+- **Review address custody (decided).** The review address is derived from the admin identity the team already controls (a public key or address as is; the first child key of an xpub), so the key that signs moderator logins also controls the received coins. Mainnet and chipnet addresses come from the same key. Each receipt sends 546 sats to the team; the network fee goes to the miner, not to XOGrid.
+- **"Confirmed" trusts the chain server.** The server accepts a receipt as confirmed when the Electrum server reports at least one confirmation. It does not verify block headers or merkle proofs. Transaction ids are recomputed from the bytes, so the server cannot swap in another transaction, but it could misreport a confirmation count.
 
 ## 5. Relationship to what exists today
 
-At the last handoff, reviews were **off-chain**: the server stores them in its database, after the wallet signs a challenge. The hybrid above is an **optional on-chain receipt layer** on top, not a replacement. Whether the existing database reviews and the on-chain ones are merged or shown side by side is still to be decided when it is built.
+Reviews stay **off-chain first**: the server stores them in its database after the wallet signs a challenge. The hybrid above is an **optional on-chain receipt layer** on top, not a replacement.
+
+**Decided: one list, with a badge.** A database review gets a "Recorded on-chain" badge (with a transaction link) once its receipt is confirmed, or "On-chain receipt pending" before that. A receipt with no matching database review counts for nothing, so a stray or spam transaction cannot change any rating. The one-review-per-wallet rule stays in one place (the database), and on-chain the **earliest** confirmed receipt per key and template is the one that counts.
+
+### How it works as built
+
+1. The reviewer publishes the review (wallet signs a message-only challenge; nothing is broadcast).
+2. Optionally the page offers "Also record it on-chain" with a network choice (chipnet is the default, mainnet moves real coins) and the cost.
+3. `prepare`: the server builds an unsigned transaction paying 546 sats to the review address, one OP_RETURN of the layout above, and change back to the reviewer. It spends one plain coin (smallest confirmed coin that fits) from the wallet's first receive address. Fee rate 1.5 sat/byte (about 460 sats).
+4. The wallet only **signs** (`broadcast: false`).
+5. `broadcast`: the server checks the signed transaction before sending: exactly one input, it parses as a receipt, it matches this review's template, rating, text hash and key, the signature is valid in the BCH virtual machine, and the fee is at most 10,000 sats. Only then does the server send it. The result is "pending".
+6. The page asks the server to re-check every 20 seconds; the server also re-checks pending receipts whenever a template's reviews are read (at most once a minute per review), so a receipt confirms even after the reviewer leaves.
 
 ## 6. Related idea, not decided: review without WizardConnect (item 8)
 
@@ -71,10 +83,11 @@ Instead of requiring a WizardConnect session, XOGrid could hand the reviewer an 
 
 Recommendation: build it **after** the basic receipt flow works and one chipnet import has succeeded. Do not present it as working before then.
 
-## 7. To build
+## 7. Status of the build list
 
-1. **Built (2026-11-19):** the receipt builder and parser, with tests (`server/src/review-receipt.ts`, `server/test/review-receipt.test.ts`). The parser checks structure and the signer's key, not signatures, so it must only be given confirmed transactions.
-2. Not started: a server reader on the review address (Electrum), with earliest-wins and hash matching.
-3. UI: a "recorded on-chain" badge with a transaction link, and the pending state.
-4. Decide the review address and its custody.
-5. Chipnet end-to-end test with a real wallet.
+1. **Built:** receipt builder and parser (`server/src/review-receipt.ts`). The parser checks structure and the signer's key, not signatures, so signatures are checked separately before sending (step 5 above).
+2. **Built, in a smaller form than first planned:** the server looks up a **given transaction** (Electrum) and attaches it to a stored review, plus the verified broadcast. It does **not** scan the whole review address to rebuild history; that is the larger design (option B in the handoff) and is not done.
+3. **Built:** the "Record on-chain" step, the badge, the pending state and the explorer link (`frontend/src/components/hub/RecordOnChain.tsx`).
+4. **Decided:** the review address comes from the admin identity (see section 4).
+5. **Needs a real wallet, not verified by the build:** a chipnet end to end run (review, record, pending to confirmed), then one mainnet run. Also unchecked: the default Electrum servers (`bch.imaginary.cash:50002`, `chipnet.imaginary.cash:50002`, overridable with `ELECTRUM_MAINNET` / `ELECTRUM_CHIPNET`), whether the wallet accepts the signing request for a real transaction, and the chipnet explorer link format.
+6. **Not built:** history rebuilt from the review address alone, merkle or header verification, receipts that spend more than one coin, and review by XO invitation (section 6).
