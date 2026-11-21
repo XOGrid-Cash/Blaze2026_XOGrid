@@ -42,7 +42,7 @@ Repo: `XOGrid-Cash/Blaze2026_XOGrid`, local clone `~/XOGrid`. Layout: `server/` 
 ### Demo page (`/demo`, redesigned 2026-11-21)
 - A hero, a template chooser and the chosen template's view. The chooser has two cards for the templates that run live (Claim-Code Voucher, Drip Mine) and a button for every other registry template, which opens a guide.
 - **Voucher:** network choice (Practice mode is chipnet; Real BCH is mainnet and needs a tick box), tabs "Create a voucher" and "Claim a voucher" (a claim link opens on the claim tab), the site-wide wallet connection, coins found automatically, quick amounts, a plain breakdown of fee and change, copy buttons for the claim link and the code, and a clear message when the network did not confirm the voucher.
-- **Drip Mine:** `RunDripMine.tsx` ("Run one for me", run a chosen coin, or "Copy invitation" for a chosen coin to run it from your own XO wallet), then the guide. The same panel is on the Drip Mine template page.
+- **Drip Mine:** `RunDripMine.tsx` ("Run one for me", run a chosen coin, or "Copy invitation" for a chosen coin to run it from your own XO wallet), then the guide. Template pages link to the demo (`config/demos.ts`, `/demo?template=<identifier>`) rather than embedding the panel.
 - **Other templates:** `TemplateGuide.tsx` (what it does, who does what, automated safety checks, download JSON).
 - Files: `frontend/src/pages/Demo.tsx`, `frontend/src/components/demo/TemplatePicker.tsx` (props `selected`, `live` as a list of `{identifier, name, blurb, icon}`, `onSelect`), `frontend/src/components/demo/TemplateGuide.tsx`, `frontend/src/components/hub/RunDripMine.tsx`. Delivered by `install_demo_redesign.py`.
 

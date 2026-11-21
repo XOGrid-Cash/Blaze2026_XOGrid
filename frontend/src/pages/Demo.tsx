@@ -1,13 +1,12 @@
 import { binToHex } from '@bitauth/libauth';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft,
     ArrowRight,
     Check,
     CheckCircle2,
-    CircleDollarSign,
     Copy,
     ExternalLink,
     Loader2,
@@ -27,6 +26,7 @@ import TemplateGuide from '../components/demo/TemplateGuide';
 import TemplatePicker, { type LiveTemplate } from '../components/demo/TemplatePicker';
 import { RunDripMine } from '../components/hub/RunDripMine';
 import { DRIP_MINE_TEMPLATE_IDENTIFIER } from '../hub/run';
+import { LIVE_DEMOS } from '../config/demos';
 
 import {
     CLAIM_FEE_SATOSHIS,
@@ -63,20 +63,14 @@ const inputClass =
 
 const cardClass = 'rounded-2xl border border-white/[0.08] bg-[#0D1117]/90 shadow-2xl shadow-black/20';
 
-const LIVE_TEMPLATES: LiveTemplate[] = [
-    {
-        identifier: VOUCHER_TEMPLATE_IDENTIFIER,
-        name: 'Claim-Code Voucher',
-        blurb: 'Lock some BCH behind a secret code. Share the code and whoever has it can claim the money.',
-        icon: <LockKeyhole size={20} />,
-    },
-    {
-        identifier: DRIP_MINE_TEMPLATE_IDENTIFIER,
-        name: 'Drip Mine',
-        blurb: 'A shared pot of coins that slowly pays out to miners. Trigger a payout and watch it happen.',
-        icon: <CircleDollarSign size={20} />,
-    },
-];
+const LIVE_TEMPLATES: LiveTemplate[] = LIVE_DEMOS.map(({ icon: Icon, ...demo }) => ({ ...demo, icon: <Icon size={20} /> }));
+
+/** The template to open on: `?template=<identifier>` when it looks like one, else the voucher. */
+function initialTemplate(search: string): string {
+    const wanted = new URLSearchParams(search).get('template')?.trim().toLowerCase() ?? '';
+
+    return /^[0-9a-f]{64}$/.test(wanted) ? wanted : VOUCHER_TEMPLATE_IDENTIFIER;
+}
 
 const shortId = (id: string): string => (id.length > 22 ? `${id.slice(0, 10)}…${id.slice(-8)}` : id);
 
@@ -1035,8 +1029,20 @@ function VoucherDemo() {
 /** The Demo page: pick any registry template. The Claim-Code Voucher and Drip Mine run live; every other template opens as a guide. */
 export default function Demo() {
     const navigate = useNavigate();
-    const [selected, setSelected] = useState<string>(VOUCHER_TEMPLATE_IDENTIFIER);
+    const location = useLocation();
+    const [selected, setSelected] = useState<string>(() => initialTemplate(location.search));
     const viewRef = useRef<HTMLDivElement>(null);
+
+    // Opened from a template's page (?template=…): go straight to that template rather than the intro.
+    useEffect(() => {
+        if (new URLSearchParams(location.search).has('template')) {
+            const timer = window.setTimeout(() => viewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+
+            return () => window.clearTimeout(timer);
+        }
+        // Only on arrival.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const select = (identifier: string) => {
         setSelected(identifier);

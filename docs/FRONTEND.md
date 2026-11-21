@@ -56,7 +56,7 @@ Named users: moderators can give an outside publisher or reviewer a display name
 ### Identifiers and badges
 
 - A template identifier is a SHA-256 based hash of the template content, so it never changes for the same template and is safe to use in URLs.
-- Badges: `unchecked` (no checks recorded), `auto-checked` (the automated checks found no failure, which is never a safety claim) and `reviewed` (a moderator reviewed this exact template). Always show the tooltip text for them; the badge copy is in `frontend/src/pages/TemplateDetail.tsx`.
+- Badges: `unchecked` (no checks recorded), `auto-checked` (the automated checks found no failure, which is never a safety claim) and `reviewed` (a moderator reviewed this exact template). The template page shows each in plain words ("Passed automatic checks") with the careful wording as a tooltip, and in full in the Technical view; the copy is in `frontend/src/components/hub/TemplateHero.tsx`.
 - A removed template has `removed: true` and a `removedReason`. Do not link to its raw JSON.
 
 ## Moderator API (login required)
@@ -100,7 +100,7 @@ There is exactly one wallet connection for the whole site, held by `WalletProvid
 
 ### The Demo page
 
-`pages/Demo.tsx` is a hero, a template chooser and the chosen template's view. The chooser (`components/demo/TemplatePicker.tsx`) shows the two templates that run live as cards, the Claim-Code Voucher and Drip Mine; every other registry template is a button that opens a guide (`components/demo/TemplateGuide.tsx`: what it does, who does what, the automated safety checks). The voucher view has two tabs, "Create a voucher" and "Claim a voucher", and a link with a claim code opens on the claim tab. Drip Mine shows `components/hub/RunDripMine.tsx` above its guide; the same panel is on the Drip Mine template page.
+`pages/Demo.tsx` is a hero, a template chooser and the chosen template's view. The chooser (`components/demo/TemplatePicker.tsx`) shows the two templates that run live as cards, the Claim-Code Voucher and Drip Mine; every other registry template is a button that opens a guide (`components/demo/TemplateGuide.tsx`: what it does, who does what, the automated safety checks). The voucher view has two tabs, "Create a voucher" and "Claim a voucher", and a link with a claim code opens on the claim tab. Drip Mine shows `components/hub/RunDripMine.tsx` above its guide. The live templates are listed once, in `config/demos.ts`; template pages use that list to link here. `/demo?template=<identifier>` opens on that template.
 
 The demo talks to wallets through one interface, `WalletConnector` in `frontend/src/voucher/wallet.ts`:
 
@@ -125,7 +125,7 @@ The demo talks to wallets through one interface, `WalletConnector` in `frontend/
 |---|---|---|
 | `/` | `pages/Landing.tsx` | Intro and featured templates |
 | `/explore` | `pages/Explore.tsx` | Search, badge filter, paging |
-| `/t/:identifier` | `pages/TemplateDetail.tsx` | Detail, audit report, reviews, flag form, policy preview |
+| `/t/:identifier` | `pages/TemplateDetail.tsx` | Simple view by default (summary, trust badge, one main action, how it works, demo link, reviews); a Technical view (`hub/useViewMode.ts`, kept per browser, `?view=technical` in a link) adds the identifier and export, audit report, sources and contents |
 | `/publish` | `pages/Publish.tsx` | Publish a template |
 | `/policy` | `pages/Policy.tsx` | Wallet trust policy preview |
 | `/demo` | `pages/Demo.tsx` | Live demo: the Claim-Code Voucher and Drip Mine run live (chipnet and mainnet), other templates open as guides |
