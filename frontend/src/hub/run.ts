@@ -28,6 +28,8 @@ export interface DripRun {
   remainderSatoshis: number;
   sizeBytes: number;
   coinsSkipped?: number;
+  /** What built the transaction: the XO engine and the template it used. */
+  builtBy?: { engine: string; templateIdentifier: string };
 }
 
 export const listDripCoins = (network: RunNetwork) =>

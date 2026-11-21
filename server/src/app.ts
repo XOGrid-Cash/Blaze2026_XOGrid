@@ -11,7 +11,7 @@ import { BADGE_RANK, type Badge } from './badges.js';
 import { buildWalletSignRequest } from './auth/challenge-transaction.js';
 import { transactionHashOf } from './review-receipt.js';
 import { attachReceipt, broadcastReceipt, prepareReceipt, refreshPendingReceipts, receiptSettings, type ReceiptConfig } from './review-chain.js';
-import { isRunNetwork, listDripCoins, runDripMine, type RunConfig } from './run-drip-mine.js';
+import { DRIP_MINE_BUILD, isRunNetwork, listDripCoins, runDripMine, type RunConfig } from './run-drip-mine.js';
 import { isReceiptNetwork, publicKeyHexOrUndefined } from './review-address.js';
 import { listUserReviews, ReviewAuth, saveUserReview, validateReview } from './user-reviews.js';
 import { categoryCounts, isCategory, CATEGORIES } from './categories.js';
@@ -320,7 +320,7 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
             return reply.status(400).send({ error: 'Request needs a network (mainnet or chipnet), a 64-character transaction id and an output index.' });
         }
 
-        return runDripMine(options.run, body.network, body.txid.toLowerCase(), body.index, body.confirmMainnet === true, body.anyCoin === true);
+        return { ...(await runDripMine(options.run, body.network, body.txid.toLowerCase(), body.index, body.confirmMainnet === true, body.anyCoin === true)), builtBy: DRIP_MINE_BUILD };
     });
 
     // ----- optional on-chain receipts for a published review (see docs/REVIEW_TRACKING.md) -----

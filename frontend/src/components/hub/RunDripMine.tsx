@@ -203,7 +203,7 @@ export function RunDripMine() {
           <CheckCircle2 size={18} className="mb-2" />
           <p className="font-semibold">Sent on {done.network}.</p>
           <p className="mt-1 leading-6">
-            XOGrid built this transaction, checked it against the contract in the BCH 2026 virtual machine, then
+            The XO engine built this transaction from the Drip Mine template. XOGrid checked it against an independent builder and the contract in the BCH 2026 virtual machine, then
             broadcast it. It can take a moment to show up on the explorer.
           </p>
           <a
@@ -216,6 +216,12 @@ export function RunDripMine() {
           </a>
           <details className="mt-3 text-xs text-emerald-100">
             <summary className="cursor-pointer">Technical details</summary>
+            {done.builtBy && (
+              <p className="mt-2 leading-5">
+                Built by the XO engine ({done.builtBy.engine}) from the Drip Mine template{" "}
+                <span className="break-all font-mono">{done.builtBy.templateIdentifier}</span>.
+              </p>
+            )}
             <p className="mt-2 leading-5">
               {done.action === "drip" ? "Drip" : "Terminate"} of {done.coin.txid}:{done.coin.index} ({done.coin.satoshis}{" "}
               sats). Fee {done.payoutSatoshis} sats, {done.sizeBytes} bytes, one input with sequence number 1.

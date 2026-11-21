@@ -29,6 +29,7 @@
     "@bitauth/libauth": "3.1.0-next.8",
     "@fastify/rate-limit": "11.2.2",
     "@fastify/static": "8.0.4",
+    "@xo-cash/crypto": "0.0.5",
     "@xo-cash/engine": "0.1.1-next.18029697917",
     "@xo-cash/state": "0.0.5",
     "@xo-cash/templates": "0.0.12",
