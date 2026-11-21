@@ -86,7 +86,7 @@ export default function TemplateGuide({ identifier }: { identifier: string }) {
             to={`/t/${identifier}`}
             className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-gray-300 transition hover:border-orange-400/40 hover:text-orange-300"
           >
-            Full template page <ExternalLink size={12} />
+            Open full template page <ExternalLink size={12} />
           </Link>
           <a
             href={`/api/templates/${encodeURIComponent(identifier)}/raw`}
@@ -94,15 +94,15 @@ export default function TemplateGuide({ identifier }: { identifier: string }) {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-gray-300 transition hover:border-orange-400/40 hover:text-orange-300"
           >
-            <FileJson size={12} /> Raw JSON
+            <FileJson size={12} /> Download JSON
           </a>
         </div>
       </section>
 
       {steps.length > 0 ? (
         <section className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6">
-          <h3 className="text-sm font-semibold text-white">Walk through it</h3>
-          <p className="mt-1 text-xs text-gray-500">Click a step to follow the template from start to finish.</p>
+          <h3 className="text-base font-semibold text-white">How it works, step by step</h3>
+          <p className="mt-1 text-xs text-gray-500">Click a step to follow along from start to finish.</p>
 
           <ol className="mt-5 space-y-2">
             {steps.map((step, index) => (
@@ -154,7 +154,7 @@ export default function TemplateGuide({ identifier }: { identifier: string }) {
 
       <div className="grid gap-6 md:grid-cols-2">
         <section className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+          <h3 className="flex items-center gap-2 text-base font-semibold text-white">
             <Users size={15} className="text-orange-400" /> Who does what
           </h3>
           {plain && plain.whoDoesWhat.length > 0 ? (
@@ -188,20 +188,20 @@ export default function TemplateGuide({ identifier }: { identifier: string }) {
         </section>
 
         <section className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
-            <ShieldCheck size={15} className="text-emerald-400" /> Automated audit
+          <h3 className="flex items-center gap-2 text-base font-semibold text-white">
+            <ShieldCheck size={15} className="text-emerald-400" /> Automated safety checks
           </h3>
           {counts ? (
             <div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs">
               {(["pass", "warn", "fail", "skipped"] as const).map((key) => (
                 <div key={key} className="rounded-lg border border-white/[0.06] p-2">
                   <p className="text-lg font-semibold text-white">{counts[key]}</p>
-                  <p className="text-gray-500">{key}</p>
+                  <p className="text-gray-500">{({ pass: "Passed", warn: "Warnings", fail: "Failed", skipped: "Skipped" } as const)[key]}</p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="mt-3 text-sm text-gray-500">This template has not been audited yet.</p>
+            <p className="mt-3 text-sm text-gray-500">This template has not been checked yet.</p>
           )}
           {detail.auditReport ? (
             <ul className="mt-3 space-y-1.5 text-xs text-gray-400">
@@ -220,9 +220,10 @@ export default function TemplateGuide({ identifier }: { identifier: string }) {
 
       <p className="flex items-start gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-xs leading-5 text-gray-500">
         <Info size={14} className="mt-0.5 shrink-0" />
-        Only the Claim-Code Voucher and Drip Mine can be run from this page today. For the other templates, this guide shows
-        what they do and what the audit found. To use one, download its JSON and import it into an XO-compatible wallet tool.
+        Only the Claim-Code Voucher and Drip Mine can be run from this page. For every other template, this guide shows what
+        it does and what the safety checks found. To use one, download its JSON and import it into an XO-compatible wallet.
       </p>
     </div>
   );
 }
+

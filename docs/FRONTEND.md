@@ -100,6 +100,8 @@ There is exactly one wallet connection for the whole site, held by `WalletProvid
 
 ### The Demo page
 
+`pages/Demo.tsx` is a hero, a template chooser and the chosen template's view. The chooser (`components/demo/TemplatePicker.tsx`) shows the two templates that run live as cards, the Claim-Code Voucher and Drip Mine; every other registry template is a button that opens a guide (`components/demo/TemplateGuide.tsx`: what it does, who does what, the automated safety checks). The voucher view has two tabs, "Create a voucher" and "Claim a voucher", and a link with a claim code opens on the claim tab. Drip Mine shows `components/hub/RunDripMine.tsx` above its guide; the same panel is on the Drip Mine template page.
+
 The demo talks to wallets through one interface, `WalletConnector` in `frontend/src/voucher/wallet.ts`:
 
 - `start(onStatus, onReady)` returns `{ uri, qrUri }` for the QR code
@@ -111,7 +113,7 @@ The demo talks to wallets through one interface, `WalletConnector` in `frontend/
 
 ### Rules that must not be relaxed
 
-- `frontend/src/voucher/core.ts` builds and verifies every transaction. It is covered by `server/test/voucher-demo.test.ts` and `server/test/spend-probe.test.ts`. Restyle the UI freely, but change `core.ts` only together with its tests.
+- `frontend/src/voucher/xo.ts` builds the voucher's lock, unlocking script and transactions with the XO engine from the registry template. `frontend/src/voucher/core.ts` is an independent libauth implementation, and every build in `xo.ts` is compared with it byte for byte; a difference refuses the transaction. Both are covered by `server/test/voucher-demo.test.ts`, `server/test/voucher-engine.test.ts` and `server/test/spend-probe.test.ts`. Restyle the UI freely, but change `xo.ts` or `core.ts` only together with their tests and one real chipnet run.
 - Never broadcast a wallet-signed transaction unless `verifySignedIssue` returned `valid`. Never remove that check.
 - The claim code is shown before broadcasting and is never stored or sent to a server. The claim link keeps it after the `#`.
 - Mainnet needs the explicit real-money confirmation. Chipnet is the default.
@@ -126,7 +128,7 @@ The demo talks to wallets through one interface, `WalletConnector` in `frontend/
 | `/t/:identifier` | `pages/TemplateDetail.tsx` | Detail, audit report, reviews, flag form, policy preview |
 | `/publish` | `pages/Publish.tsx` | Publish a template |
 | `/policy` | `pages/Policy.tsx` | Wallet trust policy preview |
-| `/demo` | `pages/Demo.tsx` | Claim-code voucher demo (chipnet and mainnet) |
+| `/demo` | `pages/Demo.tsx` | Live demo: the Claim-Code Voucher and Drip Mine run live (chipnet and mainnet), other templates open as guides |
 | `/docs` | `pages/Documentation.tsx` | In-app documentation |
 | `/admin` | `pages/Admin.tsx` | Moderator login and tools (inside `layout/DashboardLayout.tsx`, like `/dashboard`, `/explore`, `/publish`, `/policy`) |
 | `/dashboard` | `pages/Dashboard.tsx` | Still shows mock data (see HANDOFF.md) |
@@ -135,3 +137,4 @@ The demo talks to wallets through one interface, `WalletConnector` in `frontend/
 
     cd frontend && npm run build     # type-checks and builds
     cd server && npm test            # all tests must pass
+
