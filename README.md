@@ -5,6 +5,7 @@
 Built for **BCH BLAZE 2026** (Mainnet Track, Community Choice and the Build with XO bounty).
 
 - **Live demo:** https://xogrid.vercel.app/
+- **Live invite:** https://xogrid-invite.vercel.app
 - **Slides:** https://docs.google.com/presentation/d/1R0smlqpU49TfTEWwDbPZYxJXsCHA2I0p/edit?rtpof=true&sd=true
 - **Demo video:** https://youtu.be/IKGwZDHtyhk
 - **Repository:** https://github.com/XOGrid-Cash/Blaze2026_XOGrid
