@@ -47,6 +47,7 @@ function Explore() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   /** Set (or with "" remove) one filter in the address, keeping the others. */
   const setFilter = (key: string, value: string) =>
@@ -116,7 +117,7 @@ function Explore() {
     return () => {
       current = false;
     };
-  }, [query, trust, category, sort]);
+  }, [query, trust, category, sort, attempt]);
 
   const filtered = query !== "" || trust !== "" || category !== "";
   const clearFilters = () => {
@@ -253,7 +254,16 @@ function Explore() {
 
         <div className="mt-4">
           {error ? (
-            <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-6 py-10 text-center text-sm text-rose-200">{error}</div>
+            <div className="rounded-2xl border border-rose-400/20 bg-rose-500/10 px-6 py-10 text-center text-sm text-rose-200">
+              <p>{error}</p>
+              <button
+                type="button"
+                onClick={() => setAttempt((value) => value + 1)}
+                className="mt-5 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-orange-400/40 hover:text-white"
+              >
+                Try again
+              </button>
+            </div>
           ) : loading && items.length === 0 ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:gap-6" aria-hidden="true">
               {[1, 2, 3, 4, 5, 6].map((key) => (

@@ -201,7 +201,9 @@ export async function hub<T>(
       "error" in data &&
       typeof data.error === "string"
         ? data.error
-        : `Request failed (${response.status})`;
+        : response.status >= 502 && response.status <= 504
+          ? "The XOGrid server is waking up or busy. Wait a few seconds and try again."
+          : `Request failed (${response.status})`;
 
     throw new Error(errorMessage);
   }

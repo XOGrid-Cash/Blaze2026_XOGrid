@@ -531,6 +531,9 @@ function TemplateDetail() {
         {template.error && (
           <div className={card}>
             <p className="text-rose-300">{template.error}</p>
+            <button type="button" onClick={template.reload} className="mr-5 mt-4 text-sm font-semibold text-orange-400">
+              Try again
+            </button>
             <Link to="/explore" className="mt-4 inline-block text-sm text-orange-400">
               Back to the registry
             </Link>
