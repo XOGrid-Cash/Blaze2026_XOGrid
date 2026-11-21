@@ -173,6 +173,10 @@ export const removeTemplate = (token: string, identifier: string, reason: string
 export const restoreTemplate = (token: string, identifier: string) =>
   call(token, `/api/admin/templates/${identifier}/restore`, "POST", {});
 
+/** Replaces a template's categories (moderators only). The server drops duplicates and keeps the canonical order. */
+export const setTemplateCategories = (token: string, identifier: string, categories: string[]) =>
+  call(token, `/api/admin/templates/${identifier}/categories`, "PUT", { categories });
+
 export interface FeaturedItem {
   identifier: string;
   blurb: string;

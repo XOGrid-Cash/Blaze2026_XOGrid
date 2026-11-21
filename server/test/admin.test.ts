@@ -135,6 +135,7 @@ describe('sessions', () => {
             ['POST', '/api/admin/templates/x/review'],
             ['POST', '/api/admin/templates/x/remove'],
             ['POST', '/api/admin/templates/x/restore'],
+            ['PUT', '/api/admin/templates/x/categories'],
             ['PUT', '/api/admin/spotlight'],
             ['GET', '/api/admin/templates'],
             ['GET', '/api/admin/user-reviews'],
@@ -327,5 +328,46 @@ describe('admin template list', () => {
         expect(small.total).toBe(all.total);
         expect(found.items.length).toBeGreaterThan(0);
         expect(found.items.every((item: { name: string; description: string }) => /voucher/i.test(item.name + item.description))).toBe(true);
+    });
+});
+
+describe('re-filing categories', () => {
+    const adminItem = async (t: string, id: string) =>
+        ((await call('GET', '/api/admin/templates?pageSize=50', undefined, t)).json().items as { identifier: string; categories: string[] }[]).find((item) => item.identifier === id);
+
+    it('replaces a template\'s categories, drops duplicates, keeps the canonical order and logs it', async () => {
+        const t = await token();
+        const id = await firstId();
+        const res = await call('PUT', `/api/admin/templates/${id}/categories`, { categories: ['tokens', 'payment', 'tokens'] }, t);
+
+        expect(res.statusCode).toBe(200);
+        expect(res.json()).toEqual({ identifier: id, categories: ['payment', 'tokens'] });
+        expect((await call('GET', `/api/templates/${id}`)).json().categories).toEqual(['payment', 'tokens']);
+        expect((await adminItem(t, id))?.categories).toEqual(['payment', 'tokens']);
+
+        const recent = (await call('GET', '/api/admin/summary', undefined, t)).json().recentActions as { actor: string; action: string; identifier: string | null; note: string }[];
+
+        expect(recent.find((entry) => entry.action === 'categories' && entry.identifier === id)).toMatchObject({ actor: 'alice', note: 'payment, tokens' });
+    });
+
+    it('can clear a template\'s categories', async () => {
+        const t = await token();
+        const id = await firstId();
+
+        await call('PUT', `/api/admin/templates/${id}/categories`, { categories: ['payment'] }, t);
+
+        expect((await call('PUT', `/api/admin/templates/${id}/categories`, { categories: [] }, t)).json().categories).toEqual([]);
+        expect((await adminItem(t, id))?.categories).toEqual([]);
+    });
+
+    it('refuses an unknown category and an unknown template, and changes nothing', async () => {
+        const t = await token();
+        const id = await firstId();
+        const before = (await adminItem(t, id))?.categories;
+
+        expect((await call('PUT', `/api/admin/templates/${id}/categories`, { categories: ['banking'] }, t)).statusCode).toBe(400);
+        expect((await call('PUT', `/api/admin/templates/${id}/categories`, { categories: 'payment' }, t)).statusCode).toBe(400);
+        expect((await call('PUT', `/api/admin/templates/${'f'.repeat(64)}/categories`, { categories: ['payment'] }, t)).statusCode).toBe(404);
+        expect((await adminItem(t, id))?.categories).toEqual(before);
     });
 });

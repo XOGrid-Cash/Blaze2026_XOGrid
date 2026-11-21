@@ -33,6 +33,7 @@ import {
   requestChallenge,
   resolveFlag,
   restoreTemplate,
+  setTemplateCategories,
   reviewTemplate,
   saveAdminToken,
   submitLogin,
@@ -50,6 +51,7 @@ import {
   type NamedUser,
 } from "../hub/admin";
 import { publicKeyHex, signWithWallet } from "../hub/wallet";
+import { useCategories } from "../hub/categories";
 import { useWallet } from "../hub/WalletContext";
 
 type Tab = "overview" | "flags" | "templates" | "reviews" | "users";
@@ -603,6 +605,15 @@ function TemplateRow({
   const [note, setNote] = useState("");
   const ready = note.trim().length >= 3;
   const isFeatured = featured.some((item) => item.identifier === template.identifier);
+  const categoryList = useCategories();
+
+  // Re-files the template with the full new list; the server replaces the old list, logs the change and keeps the order.
+  function toggleCategory(slug: string) {
+    const current = template.categories ?? [];
+    const next = current.includes(slug) ? current.filter((item) => item !== slug) : [...current, slug];
+
+    void act(() => setTemplateCategories(token, template.identifier, next), "Categories updated.");
+  }
 
   // Feature / Unfeature edit the whole list the API stores, so the list is rebuilt from what is live now.
   function toggleFeatured() {
@@ -687,6 +698,30 @@ function TemplateRow({
           </div>
         </div>
       )}
+
+      {!template.removed && categoryList ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 2xl:mt-4" role="group" aria-label={`Categories for ${template.name}`}>
+          <span className="text-[11px] text-gray-500 2xl:text-xs">Categories:</span>
+          {categoryList.categories.map((category) => {
+            const on = (template.categories ?? []).includes(category.slug);
+
+            return (
+              <button
+                key={category.slug}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggleCategory(category.slug)}
+                className={`rounded-full border px-3 py-1 text-[11px] transition 2xl:text-xs ${
+                  on ? "border-amber-500/50 bg-amber-500/15 text-amber-200" : "border-white/10 text-gray-500 hover:text-white"
+                }`}
+              >
+                {on ? "✓ " : ""}
+                {category.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
