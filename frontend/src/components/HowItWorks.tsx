@@ -63,7 +63,7 @@ const steps = [
     label: "Put templates to work",
     details: ["Connect a supported wallet", "Review and sign transactions"],
     link: "/demo",
-    linkLabel: "Try the demo",
+    linkLabel: "Try it out",
   },
 ];
 
