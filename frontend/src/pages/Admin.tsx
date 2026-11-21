@@ -34,6 +34,7 @@ import {
   resolveFlag,
   restoreTemplate,
   setTemplateCategories,
+  setTemplatePublisherName,
   reviewTemplate,
   saveAdminToken,
   submitLogin,
@@ -606,6 +607,8 @@ function TemplateRow({
   const ready = note.trim().length >= 3;
   const isFeatured = featured.some((item) => item.identifier === template.identifier);
   const categoryList = useCategories();
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
 
   // Re-files the template with the full new list; the server replaces the old list, logs the change and keeps the order.
   function toggleCategory(slug: string) {
@@ -720,6 +723,50 @@ function TemplateRow({
               </button>
             );
           })}
+        </div>
+      ) : null}
+
+      {!template.removed ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-400 2xl:mt-4 2xl:text-sm">
+          <span className="text-[11px] text-gray-500 2xl:text-xs">Published by:</span>
+          {editingName ? (
+            <>
+              <input
+                aria-label={`Publisher name for ${template.name}`}
+                className={`${field} max-w-xs 2xl:px-4 2xl:py-3 2xl:text-sm`}
+                value={nameDraft}
+                maxLength={40}
+                onChange={(event) => setNameDraft(event.target.value)}
+                placeholder="2 to 40 characters, or empty to clear"
+              />
+              <button
+                type="button"
+                className={`${smallButton} 2xl:px-4 2xl:py-2 2xl:text-sm`}
+                onClick={() =>
+                  void act(() => setTemplatePublisherName(token, template.identifier, nameDraft.trim() || null), "Publisher name updated.").then(
+                    (ok) => ok && setEditingName(false),
+                  )
+                }
+              >
+                Save
+              </button>
+              <button type="button" className={`${smallButton} 2xl:px-4 2xl:py-2 2xl:text-sm`} onClick={() => setEditingName(false)}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              title="Click to change the name shown as this template's publisher"
+              className="min-w-0 break-all text-left underline decoration-white/20 hover:text-amber-300"
+              onClick={() => {
+                setNameDraft(template.publisherName ?? "");
+                setEditingName(true);
+              }}
+            >
+              {template.publisherName ?? template.publisher}
+            </button>
+          )}
         </div>
       ) : null}
     </div>

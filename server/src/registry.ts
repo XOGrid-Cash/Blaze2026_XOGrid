@@ -6,6 +6,7 @@ import { loadCategories, normalizeCategories, setCategoriesIfEmpty } from './cat
 import type { Db } from './db.js';
 import { loadRatings, type RatingStats } from './user-reviews.js';
 import { resolveNames } from './user-names.js';
+import { loadTemplateNames, type TemplateName } from './publisher-names.js';
 import { evaluatePolicy, type Policy, type PolicyDecision } from './policy.js';
 
 export class RegistryError extends Error {
@@ -216,6 +217,8 @@ interface Enrichment {
     categories: Map<string, string[]>;
     /** Registered display names, keyed by publisher address. */
     names: Map<string, string>;
+    /** A name given to one template: typed by its publisher or set by a moderator. */
+    templateNames: Map<string, TemplateName>;
 }
 
 async function loadEnrichment(db: Db, publishers: Iterable<string>): Promise<Enrichment> {
@@ -239,7 +242,7 @@ async function loadEnrichment(db: Db, publishers: Iterable<string>): Promise<Enr
         openFlags.set(row.identifier, (openFlags.get(row.identifier) ?? 0) + 1);
     }
 
-    return { reports, reviews, openFlags, ratings: await loadRatings(db), categories: await loadCategories(db), names: await resolveNames(db, publishers) };
+    return { reports, reviews, openFlags, ratings: await loadRatings(db), categories: await loadCategories(db), names: await resolveNames(db, publishers), templateNames: await loadTemplateNames(db) };
 }
 
 type TemplateRow = {
@@ -252,6 +255,16 @@ type TemplateRow = {
     removed_reason: string | null;
 };
 
+function publisherNameOf(row: TemplateRow, enrichment: Enrichment): string | null {
+    const own = enrichment.templateNames.get(row.identifier);
+
+    if (own?.setBy === 'admin') {
+        return own.name;
+    }
+
+    return enrichment.names.get(row.publisher) ?? own?.name ?? null;
+}
+
 function toSummary(row: TemplateRow, enrichment: Enrichment): TemplateSummary {
     const report = enrichment.reports.get(row.identifier);
     const reviewCount = enrichment.reviews.get(row.identifier) ?? 0;
@@ -261,7 +274,8 @@ function toSummary(row: TemplateRow, enrichment: Enrichment): TemplateSummary {
         name: row.name,
         description: row.description,
         publisher: row.publisher,
-        publisherName: enrichment.names.get(row.publisher) ?? null,
+        // A moderator's name for this template wins, then the name registered for the wallet, then what the publisher typed.
+        publisherName: publisherNameOf(row, enrichment),
         createdAt: row.created_at,
         badge: deriveBadge({
             hasReport: report !== undefined,

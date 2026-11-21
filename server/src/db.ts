@@ -28,6 +28,13 @@ export interface TemplateCategoriesTable {
     category: string;
 }
 
+export interface TemplatePublisherNamesTable {
+    identifier: string;
+    name: string;
+    set_by: string;
+    updated_at: string;
+}
+
 export interface AuditReportsTable {
     id: Generated<number>;
     identifier: string;
@@ -114,6 +121,7 @@ export interface ModerationLogTable {
 export interface DatabaseSchema {
     templates: TemplatesTable;
     template_categories: TemplateCategoriesTable;
+    template_publisher_names: TemplatePublisherNamesTable;
     audit_reports: AuditReportsTable;
     flags: FlagsTable;
     reviews: ReviewsTable;
@@ -335,6 +343,15 @@ export async function migrate(db: Db): Promise<void> {
         .addColumn('address', 'text', (c) => c.notNull())
         .addColumn('user_id', 'integer', (c) => c.notNull().references('users.id').onDelete('cascade'))
         .addColumn('added_at', 'text', (c) => c.notNull())
+        .execute();
+
+    await db.schema
+        .createTable('template_publisher_names')
+        .ifNotExists()
+        .addColumn('identifier', 'text', (c) => c.primaryKey().references('templates.identifier'))
+        .addColumn('name', 'text', (c) => c.notNull())
+        .addColumn('set_by', 'text', (c) => c.notNull())
+        .addColumn('updated_at', 'text', (c) => c.notNull())
         .execute();
 
     await upgradeSchema(db);

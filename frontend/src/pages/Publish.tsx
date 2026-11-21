@@ -64,6 +64,7 @@ function Publish() {
   const [copied, setCopied] = useState<boolean>(false);
   const [jsonValid, setJsonValid] = useState<boolean>(false);
   const [categories, setCategories] = useState<string[]>([]);
+  const [publisherName, setPublisherName] = useState<string>("");
 
   const [dragging, setDragging] = useState<boolean>(false);
 
@@ -310,7 +311,7 @@ function Publish() {
     try {
       // The API returns PublishResponse directly.
       // It does not return a { data, status } wrapper.
-      const response = await publishTemplate(parsedTemplate, address || undefined, categories);
+      const response = await publishTemplate(parsedTemplate, address || undefined, categories, publisherName.trim() || undefined);
 
       if (!response.identifier) {
         throw new Error(
@@ -725,6 +726,25 @@ function Publish() {
                   </div>
                 </div>
 
+                <div className="mt-6">
+                  <label htmlFor="publisher-name" className="text-sm font-medium text-white/80">
+                    Your name (optional)
+                  </label>
+                  <p className="mt-1 text-xs leading-5 text-white/35">
+                    Shown as the publisher of this template. Leave it empty to show your wallet address. If this template is already published, its publisher name is not changed.
+                  </p>
+                  <input
+                    id="publisher-name"
+                    type="text"
+                    value={publisherName}
+                    maxLength={40}
+                    disabled={loading}
+                    autoComplete="off"
+                    placeholder="For example: Ada Lovelace"
+                    onChange={(event) => setPublisherName(event.target.value)}
+                    className="mt-3 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-orange-400/50 disabled:opacity-40"
+                  />
+                </div>
                 <CategoryPicker selected={categories} onChange={setCategories} disabled={loading} />
 
                 {/* VALIDATION ERROR */}

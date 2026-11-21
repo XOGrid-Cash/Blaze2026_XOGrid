@@ -6,6 +6,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { decodeTransaction, hexToBin } from '@bitauth/libauth';
 import { AdminAuth, type LoginProof } from './admin.js';
 import { registerAdminRoutes } from './admin-routes.js';
+import { normalizePublisherName, setTemplateName } from './publisher-names.js';
 import type { Db } from './db.js';
 import { BADGE_RANK, type Badge } from './badges.js';
 import { buildWalletSignRequest } from './auth/challenge-transaction.js';
@@ -174,14 +175,21 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
         '/api/templates',
         { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
         async (request, reply) => {
-            const body = (request.body ?? {}) as { template?: unknown; publisher?: unknown; categories?: unknown };
+            const body = (request.body ?? {}) as { template?: unknown; publisher?: unknown; publisherName?: unknown; categories?: unknown };
 
             if (body.template === undefined) {
                 return reply.status(400).send({ error: 'Request body must include a "template".' });
             }
 
             const publisher = typeof body.publisher === 'string' && body.publisher.trim() ? body.publisher.trim() : 'anonymous';
+            // Checked before anything is stored, so a bad name does not publish the template.
+            const publisherName = normalizePublisherName(body.publisherName);
             const result = await publishTemplate(db, body.template, publisher, body.categories);
+
+            // Only the first publisher can name a template. Re-publishing an existing one never changes its name.
+            if (publisherName && result.created) {
+                await setTemplateName(db, result.identifier, publisherName, 'publisher');
+            }
 
             return reply.status(result.created ? 201 : 200).send(result);
         },

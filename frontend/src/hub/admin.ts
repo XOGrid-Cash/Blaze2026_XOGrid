@@ -177,6 +177,10 @@ export const restoreTemplate = (token: string, identifier: string) =>
 export const setTemplateCategories = (token: string, identifier: string, categories: string[]) =>
   call(token, `/api/admin/templates/${identifier}/categories`, "PUT", { categories });
 
+/** Sets the name shown as a template's publisher, or clears it with null (moderators only). */
+export const setTemplatePublisherName = (token: string, identifier: string, name: string | null) =>
+  call(token, `/api/admin/templates/${identifier}/publisher-name`, "PUT", { name });
+
 export interface FeaturedItem {
   identifier: string;
   blurb: string;
