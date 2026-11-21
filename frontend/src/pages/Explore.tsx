@@ -213,7 +213,7 @@ function Explore() {
               <Play size={14} className="fill-current" />
               New here? Watch one run
             </h2>
-            <div className="mt-3 grid gap-3 xl:grid-cols-2">
+            <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
               {LIVE_DEMOS.map((demo) => {
                 const Icon = demo.icon;
 
@@ -221,14 +221,14 @@ function Explore() {
                   <Link
                     key={demo.identifier}
                     to={demoLink(demo.identifier)}
-                    className="group flex items-center gap-4 rounded-2xl border border-orange-400/20 bg-gradient-to-r from-orange-500/[0.10] to-transparent p-4 transition hover:border-orange-400/45"
+                    className="group flex min-w-0 items-center gap-4 rounded-2xl border border-orange-400/20 bg-gradient-to-r from-orange-500/[0.10] to-transparent p-4 transition hover:border-orange-400/45"
                   >
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500/15 text-orange-300">
                       <Icon size={21} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block font-semibold text-white">{demo.name}</span>
-                      <span className="block truncate text-sm text-slate-400">{demo.blurb}</span>
+                      <span className="mt-0.5 line-clamp-2 text-sm leading-5 text-slate-400">{demo.blurb}</span>
                     </span>
                     <span className="hidden shrink-0 items-center gap-1 text-sm font-semibold text-orange-300 sm:flex">
                       Try the demo
