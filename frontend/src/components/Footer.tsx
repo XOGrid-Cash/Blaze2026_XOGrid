@@ -28,7 +28,7 @@ function Footer() {
     ],
     Resources: [
       { name: "Policy", href: "/policy" },
-      { name: "Demo", href: "/demo" },
+      { name: "Try it live", href: "/demo" },
       { name: "Documentation", href: "/docs" },
     ],
   };

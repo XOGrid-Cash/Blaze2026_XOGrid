@@ -51,7 +51,7 @@ const navigation: NavigationItem[] = [
     icon: Upload,
   },
    {
-      label: "Demo",
+      label: "Try it live",
       to: "/demo",
       icon:  Play,
     },

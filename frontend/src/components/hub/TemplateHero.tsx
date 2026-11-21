@@ -46,7 +46,7 @@ export function TemplateHero({ detail, mode, shortSummary }: { detail: Detail; m
                 className="inline-flex items-center gap-1.5 rounded-full border border-orange-400/30 bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-300 transition hover:bg-orange-500/20"
               >
                 <Play size={12} className="fill-current" />
-                XO Ready
+                Try it live
               </Link>
             )}
             {detail.categories?.map((slug) => (
