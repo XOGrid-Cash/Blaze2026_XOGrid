@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
-import { AlertTriangle, BadgeCheck, ExternalLink, FileCode2, MinusCircle, Play, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ExternalLink, FileCode2, Play } from "lucide-react";
 
-import type { Badge, Detail } from "../../hub/api";
+import type { Detail } from "../../hub/api";
+import { shortSummary as summarize } from "../../hub/summary";
+import { TRUST } from "../../hub/trust";
 import { categoryLabel } from "../../hub/categories";
 import type { ViewMode } from "../../hub/useViewMode";
 import { demoLink, liveDemo } from "../../config/demos";
@@ -15,47 +17,7 @@ const primaryButton =
 const secondaryButton =
   "inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3.5 text-base font-semibold text-slate-200 transition hover:border-orange-400/40 hover:text-white";
 
-/** What each badge means, in plain words first and the careful wording second. */
-const TRUST: Record<Badge, { label: string; fine: string; icon: typeof ShieldCheck; tone: string }> = {
-  unchecked: {
-    label: "Not checked yet",
-    fine: "No automated checks or moderator reviews have been recorded for this template.",
-    icon: MinusCircle,
-    tone: "text-slate-300 border-slate-400/20 bg-slate-400/10",
-  },
-  "auto-checked": {
-    label: "Passed automatic checks",
-    fine: "Automated checks found no problems. That is not a promise that it is safe.",
-    icon: ShieldCheck,
-    tone: "text-emerald-300 border-emerald-400/20 bg-emerald-400/10",
-  },
-  reviewed: {
-    label: "Reviewed by a moderator",
-    fine: "A moderator reviewed this exact template.",
-    icon: BadgeCheck,
-    tone: "text-violet-300 border-violet-400/20 bg-violet-400/10",
-  },
-};
-
 const when = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-
-/**
- * The opening of a description, for a short summary: whole sentences until there are about 80 characters, so a
- * terse first sentence ("An MEV faucet.") brings the next one along.
- */
-function firstSentence(text: string): string {
-  const sentences = text.trim().match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) ?? [text];
-  let summary = "";
-
-  for (const sentence of sentences) {
-    summary += sentence;
-    if (summary.trim().length >= 80) {
-      break;
-    }
-  }
-
-  return summary.trim();
-}
 
 /** The top of a template page: what it is, whether to trust it, and the one thing to do next. */
 export function TemplateHero({ detail, mode, shortSummary }: { detail: Detail; mode: ViewMode; shortSummary: boolean }) {
@@ -106,7 +68,7 @@ export function TemplateHero({ detail, mode, shortSummary }: { detail: Detail; m
         </p>
       )}
 
-      <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-200">{shortSummary ? firstSentence(detail.description) : detail.description}</p>
+      <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-200">{shortSummary ? summarize(detail.description) : detail.description}</p>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <span
