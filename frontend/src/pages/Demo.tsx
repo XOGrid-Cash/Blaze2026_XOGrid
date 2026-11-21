@@ -38,21 +38,19 @@ import {
     NETWORKS,
     VOUCHER_TEMPLATE_IDENTIFIER,
     addressFor,
-    buildIssue,
-    buildIssueSignRequest,
     claimFragment,
     codeHash,
     lockingBytecodeFromAddress,
     newClaimCode,
     parseClaimCode,
     parseClaimFragment,
-    prepareClaim,
-    verifySignedIssue,
-    voucherLockingBytecode,
     walletLockingBytecode,
     type Coin,
     type Network,
 } from '../voucher/core';
+// The voucher's lock, unlocking script and transactions are built by the XO engine from the registry template (xo.ts),
+// each compared with the independent implementation in core.ts.
+import { buildIssue, buildIssueSignRequest, prepareClaim, verifySignedIssue, voucherLockingBytecode } from '../voucher/xo';
 
 import { WizardConnectWallet, scanCoins } from '../voucher/wallet';
 
