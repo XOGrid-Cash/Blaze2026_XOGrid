@@ -9,12 +9,17 @@ import {
     describeDripCoin,
     dripMineAddress,
     dripPayoutFor,
+    DRIP_MINE_TEMPLATE_IDENTIFIER,
     listDripCoins,
+    prepareDripInvitation,
     runDripMine,
     verifyDripTransaction,
     type RunConfig,
 } from '../src/run-drip-mine.js';
 import { transactionHashOf } from '../src/review-receipt.js';
+import { COMMUNITY_TEMPLATE_JSON } from '../src/templates/community-data.js';
+import { buildInvitationTransactionFromMergedCommit, listInvitationValidationIssues, mergeInvitationCommits } from '@xo-cash/engine';
+import { deserializeInvitation, parseTemplate } from '@xo-cash/utils';
 import { freshDb } from './helpers.js';
 
 const TXID = 'ab'.repeat(32);
@@ -196,6 +201,72 @@ describe('listing and running', () => {
     });
 });
 
+describe('an invitation for the user\'s own wallet', () => {
+    const dripMineTemplate = parseTemplate(COMMUNITY_TEMPLATE_JSON['drip-mine']!);
+
+    it.each([
+        ['chipnet', 100_000n, 'drip'],
+        ['mainnet', 100_000n, 'drip'],
+        ['chipnet', 700n, 'terminate'],
+    ] as const)('on %s for a %s sat coin: XO accepts it and builds the very transaction a run would send (%s)', async (network, satoshis, action) => {
+        const { chain, sent } = fakeChain([coin(satoshis, { index: 4 })]);
+        const view = await prepareDripInvitation(configFor(chain), network, TXID, 4);
+        const invitation = deserializeInvitation(view.invitation);
+
+        // nothing went to the network
+        expect(sent).toHaveLength(0);
+        expect(invitation.templateIdentifier).toBe(DRIP_MINE_TEMPLATE_IDENTIFIER);
+        expect(invitation.actionIdentifier).toBe(action);
+        expect(invitation.invitationIdentifier).toBe(view.invitationIdentifier);
+        expect(listInvitationValidationIssues(invitation, dripMineTemplate as never, network)).toEqual([]);
+
+        const built = buildInvitationTransactionFromMergedCommit(mergeInvitationCommits(invitation, dripMineTemplate as never), dripMineTemplate as never, action);
+        const expected = buildDripTransaction({ txid: TXID, index: 4, satoshis }, network);
+
+        expect(built.serializedTransaction).toBe(expected.transactionHex);
+        expect(built.transactionHash).toBe(view.transactionId);
+        expect(view.transactionHex).toBe(expected.transactionHex);
+
+        const decoded = decodeTransaction(hexToBin(view.transactionHex));
+
+        if (typeof decoded === 'string') {
+            throw new Error(decoded);
+        }
+
+        expect(verifyDripTransaction(decoded, satoshis)).toBe(true);
+        expect(view).toMatchObject({ network, action, coin: { txid: TXID, index: 4, satoshis: Number(satoshis) } });
+        expect(Date.parse(view.expiresAt)).toBeGreaterThan(Date.now());
+    });
+
+    it('wrong network: the invitation is refused on the other network', async () => {
+        const { chain } = fakeChain([coin(100_000n)]);
+        const view = await prepareDripInvitation(configFor(chain), 'mainnet', TXID, 0);
+
+        expect(listInvitationValidationIssues(deserializeInvitation(view.invitation), dripMineTemplate as never, 'mainnet')).toEqual([]);
+        expect(listInvitationValidationIssues(deserializeInvitation(view.invitation), dripMineTemplate as never, 'chipnet')).not.toEqual([]);
+    });
+
+    it('carries the coin value on the input so a wallet needs no lookup, and takes that value from the chain', async () => {
+        const { chain } = fakeChain([coin(123_456n)]);
+        const view = await prepareDripInvitation(configFor(chain), 'chipnet', TXID, 0);
+        const inputs = deserializeInvitation(view.invitation).commits.flatMap((item) => (item.data as { inputs?: { valueSatoshis?: bigint }[] }).inputs ?? []);
+
+        expect(inputs.some((input) => input.valueSatoshis === 123_456n)).toBe(true);
+    });
+
+    it('refuses coins a run would refuse, and sends nothing', async () => {
+        const missing = fakeChain([coin(100_000n)]);
+        const young = fakeChain([coin(100_000n, { height: 0 })]);
+        const tokens = fakeChain([coin(100_000n, { hasToken: true })]);
+
+        await expect(prepareDripInvitation(configFor(missing.chain), 'chipnet', TXID, 9)).rejects.toMatchObject({ status: 404 });
+        await expect(prepareDripInvitation(configFor(young.chain), 'chipnet', TXID, 0)).rejects.toMatchObject({ status: 409 });
+        await expect(prepareDripInvitation(configFor(tokens.chain), 'chipnet', TXID, 0)).rejects.toMatchObject({ status: 409 });
+        await expect(prepareDripInvitation({ chains: {} }, 'chipnet', TXID, 0)).rejects.toMatchObject({ status: 503 });
+        expect([...missing.sent, ...young.sent, ...tokens.sent]).toHaveLength(0);
+    });
+});
+
 describe('the routes', () => {
     let db: Db;
     let app: FastifyInstance;
@@ -233,6 +304,17 @@ describe('the routes', () => {
         expect((await app.inject({ method: 'POST', url: '/api/run/drip-mine', payload: { network: 'chipnet', txid: TXID, index: -1 } })).statusCode).toBe(400);
         expect((await app.inject({ method: 'POST', url: '/api/run/drip-mine', payload: { network: 'mainnet', txid: TXID, index: 0 } })).statusCode).toBe(400);
         expect(sent).toHaveLength(0);
+    });
+
+    it('hands out an invitation without broadcasting, on mainnet too and without a confirmation', async () => {
+        const answer = await app.inject({ method: 'POST', url: '/api/run/drip-mine/invitation', payload: { network: 'mainnet', txid: TXID.toUpperCase(), index: 0 } });
+
+        expect(answer.statusCode).toBe(200);
+        expect(answer.json()).toMatchObject({ network: 'mainnet', action: 'drip', builtBy: { engine: '@xo-cash/engine', templateIdentifier: DRIP_MINE_TEMPLATE_IDENTIFIER } });
+        expect(deserializeInvitation(answer.json().invitation).invitationIdentifier).toBe(answer.json().invitationIdentifier);
+        expect(sent).toHaveLength(0);
+        expect((await app.inject({ method: 'POST', url: '/api/run/drip-mine/invitation', payload: { network: 'nope', txid: TXID, index: 0 } })).statusCode).toBe(400);
+        expect((await app.inject({ method: 'POST', url: '/api/run/drip-mine/invitation', payload: { network: 'chipnet', txid: TXID, index: 1.5 } })).statusCode).toBe(400);
     });
 
     it('answers 503 when live runs are off', async () => {

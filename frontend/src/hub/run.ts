@@ -32,6 +32,28 @@ export interface DripRun {
   builtBy?: { engine: string; templateIdentifier: string };
 }
 
+/** An XO invitation for one coin, for the user's own wallet to import and broadcast. Nothing has been broadcast. */
+export interface DripInvitation {
+  network: RunNetwork;
+  /** The serialized XO invitation: what the user copies or downloads. */
+  invitation: string;
+  invitationIdentifier: string;
+  /** ISO time when the earliest commit expires. */
+  expiresAt: string;
+  /** The transaction the wallet will build from the invitation. */
+  transactionId: string;
+  transactionHex: string;
+  action: "drip" | "terminate";
+  coin: { txid: string; index: number; satoshis: number };
+  payoutSatoshis: number;
+  remainderSatoshis: number;
+  sizeBytes: number;
+  builtBy?: { engine: string; templateIdentifier: string };
+}
+
+export const prepareDripInvitation = (body: { network: RunNetwork; txid: string; index: number }) =>
+  hub<DripInvitation>("/api/run/drip-mine/invitation", { method: "POST", body });
+
 export const listDripCoins = (network: RunNetwork) =>
   hub<{ network: RunNetwork; address: string; coins: DripCoinView[] }>(
     `/api/run/drip-mine/coins?network=${network}`,

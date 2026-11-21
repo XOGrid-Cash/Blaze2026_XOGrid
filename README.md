@@ -26,7 +26,7 @@ An XO template describes who does what in a transaction, and a wallet will build
 2. Open a template. Read its plain-English steps, the seven audit checks, the reviews and the credits. Download the exact JSON.
 3. Go to **Demo**.
    - **Claim-Code Voucher:** create a voucher, copy the claim link or the code, then claim it from the other tab.
-   - **Drip Mine:** press "Run one for me". The server spends one coin and the payout goes to the miner as the transaction fee.
+   - **Drip Mine:** press "Run one for me". The server spends one coin and the payout goes to the miner as the transaction fee. Or press "Copy invitation" on a coin to get the XO invitation, unbroadcast, and run it from your own XO wallet.
 4. Choose **Practice mode** (chipnet, test coins) or **Real BCH** (mainnet, needs a tick box to confirm). The page shows the transaction id and a block explorer link.
 
 Both demos have been run on **chipnet and mainnet** by the team and the Drip Mine run touches none of a visitor's keys or funds.

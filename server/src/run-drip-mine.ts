@@ -18,6 +18,7 @@ import { transactionHashOf } from './review-receipt.js';
 import { Crypto } from '@xo-cash/crypto';
 import {
     InvitationBuilder,
+    type InvitationInputWithSpentOutputFields,
     buildCompilerBytecodeDataFromCompilationVariables,
     buildInvitationTransactionFromMergedCommit,
     compileLockingBytecodeFromTemplateLockingScriptIdentifier,
@@ -196,8 +197,21 @@ if (binToHex(engineLockingBytecode) !== binToHex(dripMineLockingBytecode) || bin
     throw new Error('The Drip Mine template no longer compiles to the contract at the shared address.');
 }
 
+/** The XO invitation the engine built a spend from, as a wallet imports it. Its commits are signed by a throwaway key. */
+export interface DripInvitation {
+    /** The invitation exactly as serialized by @xo-cash/utils: what the user copies into a wallet. */
+    serialized: string;
+    identifier: string;
+    /** When the earliest commit expires: a wallet must import the invitation before then. */
+    expiresAt: Date;
+}
+
 /** The spend, built by the XO engine from the template and decoded. The engine decides the remainder, lock and sequence number. */
-function buildWithEngine(coin: { txid: string; index: number; satoshis: bigint }, action: DripAction, network: RunNetwork): { hex: string; hash: string } {
+function buildWithEngine(
+    coin: { txid: string; index: number; satoshis: bigint },
+    action: DripAction,
+    network: RunNetwork,
+): { hex: string; hash: string; invitation: DripInvitation } {
     const templateIdentifier = DRIP_MINE_TEMPLATE_IDENTIFIER;
     const signer = new Crypto(globalThis.crypto.getRandomValues(new Uint8Array(64)), { network: resolveHdKeyNetwork(network) });
     const builder = new InvitationBuilder({ templateIdentifier, actionIdentifier: action }, network);
@@ -222,14 +236,23 @@ function buildWithEngine(coin: { txid: string; index: number; satoshis: bigint }
     commit({ roleIdentifier: 'dripper' });
     commit({ variables: [{ variableIdentifier: 'dripCoinSatoshis', value: coin.satoshis, roleIdentifier: 'dripper' }] });
     // The template's own input: its sequence number (1) and the rest come from the template, the outpoint from the coin.
-    const inputCommit = commit({
-        inputs: [{ inputIdentifier: 'dripMineInput', transactionIndex: 0, outpointTransactionHash: hexToBin(coin.txid), outpointIndex: coin.index }],
-    });
+    // The input also carries the spent coin's value, as XO wallets write it, so a wallet importing the invitation needs
+    // no lookup. It is not part of the transaction bytes.
+    const dripMineInput: InvitationInputWithSpentOutputFields = {
+        inputIdentifier: 'dripMineInput',
+        transactionIndex: 0,
+        outpointTransactionHash: hexToBin(coin.txid),
+        outpointIndex: coin.index,
+        valueSatoshis: coin.satoshis,
+    };
+    const inputCommit = commit({ inputs: [dripMineInput] });
     // The output (lock and value) is resolved by the engine from the template, using the template's payout rule.
     commit({ outputs: [{ outputIdentifier: action === 'drip' ? 'dripRemainderOutput' : 'terminalOutput', transactionIndex: 0 }] });
     commit({ inputs: [{ mergesWith: { commitIdentifier: inputCommit, itemIndex: 0 }, unlockingBytecode: engineUnlockingBytecode }] });
 
-    const invitation = deserializeInvitation(serializeInvitation(builder.build()));
+    const serialized = serializeInvitation(builder.build());
+    // Everything below checks the serialized copy, which is exactly what a user may be handed.
+    const invitation = deserializeInvitation(serialized);
     const issues = listInvitationValidationIssues(invitation, dripMineTemplate as never, network);
 
     if (issues.length > 0) {
@@ -238,16 +261,27 @@ function buildWithEngine(coin: { txid: string; index: number; satoshis: bigint }
 
     const built = buildInvitationTransactionFromMergedCommit(mergeInvitationCommits(invitation, dripMineTemplate as never), dripMineTemplate as never, action);
 
-    return { hex: built.serializedTransaction, hash: built.transactionHash };
+    return {
+        hex: built.serializedTransaction,
+        hash: built.transactionHash,
+        invitation: {
+            serialized,
+            identifier: invitation.invitationIdentifier,
+            expiresAt: new Date(Math.min(...invitation.commits.map((item) => Number(item.expiresAtTimestamp)))),
+        },
+    };
 }
 
 /**
  * The raw transaction for spending one coin, built by the XO engine from the Drip Mine template and then compared,
  * byte for byte, with the independent builder. If the two differ, nothing is sent.
  */
-export function buildDripTransaction(coin: { txid: string; index: number; satoshis: bigint }, network: RunNetwork = 'chipnet'): DripPlan {
+export function buildDripTransaction(
+    coin: { txid: string; index: number; satoshis: bigint },
+    network: RunNetwork = 'chipnet',
+): DripPlan & { invitation: DripInvitation } {
     const independent = buildDripTransactionIndependent(coin);
-    let engine: { hex: string; hash: string };
+    let engine: ReturnType<typeof buildWithEngine>;
 
     try {
         engine = buildWithEngine(coin, independent.action, network);
@@ -263,7 +297,7 @@ export function buildDripTransaction(coin: { txid: string; index: number; satosh
         throw new RegistryError('The XO engine and the independent builder disagree about the transaction id, so it was not sent.', 500);
     }
 
-    return independent;
+    return { ...independent, invitation: engine.invitation };
 }
 
 /** Runs the transaction through the BCH 2026 virtual machine against the coin it spends. True, or the reason it fails. */
@@ -380,6 +414,71 @@ export async function listDripCoins(config: RunConfig, network: RunNetwork): Pro
     return { network, address: dripMineAddress(network), coins };
 }
 
+/** Looks a coin up at the shared address and refuses it unless it can be spent now. Its value comes from the chain. */
+async function findSpendableCoin(chain: ChainSource, network: RunNetwork, txid: string, index: number): Promise<{ unspent: Unspent[]; wanted: Unspent }> {
+    const unspent = await fromChain(network, () => chain.listUnspent(dripMineLockingBytecode));
+    const wanted = unspent.find((item) => item.txid.toLowerCase() === txid.toLowerCase() && item.index === index);
+
+    if (!wanted) {
+        throw new RegistryError('That coin is not at the Drip Mine address on this network. It may already have been spent.', 404);
+    }
+
+    const view = describeDripCoin(wanted);
+
+    if (!view.spendable) {
+        throw new RegistryError(view.reason ?? 'That coin cannot be spent right now.', 409);
+    }
+
+    return { unspent, wanted };
+}
+
+export interface DripInvitationView {
+    network: RunNetwork;
+    /** The XO invitation, serialized: import it into an XO wallet, which builds and broadcasts the spend. */
+    invitation: string;
+    invitationIdentifier: string;
+    /** ISO time when the earliest commit expires. */
+    expiresAt: string;
+    /** The transaction a wallet will build from this invitation. It has not been broadcast. */
+    transactionId: string;
+    transactionHex: string;
+    action: DripAction;
+    coin: { txid: string; index: number; satoshis: number };
+    payoutSatoshis: number;
+    remainderSatoshis: number;
+    sizeBytes: number;
+}
+
+/**
+ * An XO invitation for spending one Drip Mine coin, for the user's own wallet to import and broadcast. Built and
+ * checked exactly like a run (engine, independent builder, virtual machine), but nothing is broadcast from here, so no
+ * mainnet confirmation is needed. Like a run, the coin's value comes from the chain, never from the request.
+ */
+export async function prepareDripInvitation(config: RunConfig, network: RunNetwork, txid: string, index: number): Promise<DripInvitationView> {
+    const chain = chainFor(config, network);
+    const { wanted } = await findSpendableCoin(chain, network, txid, index);
+    const plan = buildDripTransaction(wanted, network);
+    const verdict = verifyDripTransaction(plan.transaction, wanted.satoshis);
+
+    if (verdict !== true) {
+        throw new RegistryError(`XOGrid's own check of the transaction failed, so no invitation was made: ${verdict}`, 500);
+    }
+
+    return {
+        network,
+        invitation: plan.invitation.serialized,
+        invitationIdentifier: plan.invitation.identifier,
+        expiresAt: plan.invitation.expiresAt.toISOString(),
+        transactionId: plan.transactionId,
+        transactionHex: plan.transactionHex,
+        action: plan.action,
+        coin: { txid: wanted.txid, index: wanted.index, satoshis: Number(wanted.satoshis) },
+        payoutSatoshis: Number(plan.payoutSatoshis),
+        remainderSatoshis: Number(plan.remainderSatoshis),
+        sizeBytes: plan.sizeBytes,
+    };
+}
+
 export interface DripRun {
     network: RunNetwork;
     transactionId: string;
@@ -421,19 +520,7 @@ export async function runDripMine(
     }
 
     const chain = chainFor(config, network);
-    const unspent = await fromChain(network, () => chain.listUnspent(dripMineLockingBytecode));
-    const wanted = unspent.find((item) => item.txid.toLowerCase() === txid.toLowerCase() && item.index === index);
-
-    if (!wanted) {
-        throw new RegistryError('That coin is not at the Drip Mine address on this network. It may already have been spent.', 404);
-    }
-
-    const view = describeDripCoin(wanted);
-
-    if (!view.spendable) {
-        throw new RegistryError(view.reason ?? 'That coin cannot be spent right now.', 409);
-    }
-
+    const { unspent, wanted } = await findSpendableCoin(chain, network, txid, index);
     const candidates = [wanted];
 
     if (anyCoin) {
@@ -448,7 +535,7 @@ export async function runDripMine(
     let rejection = '';
 
     for (const [position, coin] of candidates.entries()) {
-        const plan = buildDripTransaction(coin);
+        const plan = buildDripTransaction(coin, network);
         const verdict = verifyDripTransaction(plan.transaction, coin.satoshis);
 
         if (verdict !== true) {

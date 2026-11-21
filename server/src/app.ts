@@ -11,7 +11,7 @@ import { BADGE_RANK, type Badge } from './badges.js';
 import { buildWalletSignRequest } from './auth/challenge-transaction.js';
 import { transactionHashOf } from './review-receipt.js';
 import { attachReceipt, broadcastReceipt, prepareReceipt, refreshPendingReceipts, receiptSettings, type ReceiptConfig } from './review-chain.js';
-import { DRIP_MINE_BUILD, isRunNetwork, listDripCoins, runDripMine, type RunConfig } from './run-drip-mine.js';
+import { DRIP_MINE_BUILD, isRunNetwork, listDripCoins, prepareDripInvitation, runDripMine, type RunConfig } from './run-drip-mine.js';
 import { isReceiptNetwork, publicKeyHexOrUndefined } from './review-address.js';
 import { listUserReviews, ReviewAuth, saveUserReview, validateReview } from './user-reviews.js';
 import { categoryCounts, isCategory, CATEGORIES } from './categories.js';
@@ -301,6 +301,19 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
         return listDripCoins(options.run, network);
     });
 
+    /** The coin a request body names (network, transaction id, output index), or undefined when it is malformed. */
+    const chosenCoin = (body: { network?: unknown; txid?: unknown; index?: unknown }) =>
+        isRunNetwork(body.network) &&
+        typeof body.txid === 'string' &&
+        /^[0-9a-f]{64}$/i.test(body.txid) &&
+        typeof body.index === 'number' &&
+        Number.isInteger(body.index) &&
+        body.index >= 0 &&
+        body.index <= 1_000_000
+            ? { network: body.network, txid: body.txid.toLowerCase(), index: body.index }
+            : undefined;
+    const BAD_COIN = 'Request needs a network (mainnet or chipnet), a 64-character transaction id and an output index.';
+
     app.post('/api/run/drip-mine', { config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async (request, reply) => {
         const body = (request.body ?? {}) as { network?: unknown; txid?: unknown; index?: unknown; confirmMainnet?: unknown; anyCoin?: unknown };
 
@@ -308,19 +321,28 @@ export async function buildApp(db: Db, options: AppOptions = {}): Promise<Fastif
             return reply.status(503).send({ error: 'Live runs are not available on this server.' });
         }
 
-        if (
-            !isRunNetwork(body.network) ||
-            typeof body.txid !== 'string' ||
-            !/^[0-9a-f]{64}$/i.test(body.txid) ||
-            typeof body.index !== 'number' ||
-            !Number.isInteger(body.index) ||
-            body.index < 0 ||
-            body.index > 1_000_000
-        ) {
-            return reply.status(400).send({ error: 'Request needs a network (mainnet or chipnet), a 64-character transaction id and an output index.' });
+        const chosen = chosenCoin(body);
+
+        if (!chosen) {
+            return reply.status(400).send({ error: BAD_COIN });
         }
 
-        return { ...(await runDripMine(options.run, body.network, body.txid.toLowerCase(), body.index, body.confirmMainnet === true, body.anyCoin === true)), builtBy: DRIP_MINE_BUILD };
+        return { ...(await runDripMine(options.run, chosen.network, chosen.txid, chosen.index, body.confirmMainnet === true, body.anyCoin === true)), builtBy: DRIP_MINE_BUILD };
+    });
+
+    // An XO invitation for the user's own wallet: built and checked like a run, but never broadcast from here.
+    app.post('/api/run/drip-mine/invitation', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (request, reply) => {
+        if (!options.run) {
+            return reply.status(503).send({ error: 'Live runs are not available on this server.' });
+        }
+
+        const chosen = chosenCoin((request.body ?? {}) as { network?: unknown; txid?: unknown; index?: unknown });
+
+        if (!chosen) {
+            return reply.status(400).send({ error: BAD_COIN });
+        }
+
+        return { ...(await prepareDripInvitation(options.run, chosen.network, chosen.txid, chosen.index)), builtBy: DRIP_MINE_BUILD };
     });
 
     // ----- optional on-chain receipts for a published review (see docs/REVIEW_TRACKING.md) -----
