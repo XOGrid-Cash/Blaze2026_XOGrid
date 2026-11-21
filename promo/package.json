@@ -1,0 +1,14 @@
+{
+  "name": "xogrid-promo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "node serve.mjs",
+    "record": "node record.mjs",
+    "music": "node music.mjs",
+    "mux": "node mux.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.1"
+  }
+}
