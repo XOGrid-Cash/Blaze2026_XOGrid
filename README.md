@@ -118,7 +118,7 @@ Badgers Stake's upstream repository states no licence, so its copy is for verifi
 
 ## Status and honest limits
 
-- **Tests:** 301 server tests in 19 files pass (`cd server && npx vitest --run`). The tests so far run on SQLite. Production is PostgreSQL, and `npm run test:postgres` runs the suite against a scratch Postgres database.
+- **Tests:** 321 server tests in 20 files pass (`cd server && npx vitest --run`). The tests so far run on SQLite. Production is PostgreSQL, and `npm run test:postgres` runs the suite against a scratch Postgres database.
 - **Live runs:** the voucher and Drip Mine were run by the team on chipnet and mainnet. Everything else about wallets and the chain (the WizardConnect relay, live Electrum, behaviour in every wallet) is checked by hand on live networks, not in the automated tests.
 - **On-chain review receipts are built but switched off** (`RECEIPTS=1` turns them on). A review can be recorded as a small transaction carrying an `XGRD` OP_RETURN with the template identifier, the rating and a hash of the text. The flow is type-checked and tested against fakes, and is not enabled in the live site. The design and the reasons for it are in [docs/REVIEW_TRACKING.md](docs/REVIEW_TRACKING.md).
 - **Only the voucher and Drip Mine run live.** Every other template opens as a guide (what it does, who does what, the automated checks, download the JSON). No invites yet for Revenue Split, Block Points or Badgers staking: whether an XO wallet adds the user's own coin and signature on import has not been tested, so we do not present it as working.

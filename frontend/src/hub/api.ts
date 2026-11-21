@@ -315,6 +315,7 @@ export const publishTemplate = (
   template: unknown,
   publisher?: string,
   categories?: string[],
+  publisherName?: string,
 ): Promise<PublishResponse> =>
   hub<PublishResponse>("/api/templates", {
     method: "POST",
@@ -322,6 +323,7 @@ export const publishTemplate = (
       template,
       ...(publisher ? { publisher } : {}),
       ...(categories && categories.length > 0 ? { categories } : {}),
+      ...(publisherName ? { publisherName } : {}),
     },
   });
 

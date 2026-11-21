@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { AdminAuth, type AdminSession, type LoginProof } from './admin.js';
 import { buildWalletSignRequest } from './auth/challenge-transaction.js';
 import { normalizeCategories, setCategories } from './categories.js';
+import { clearTemplateName, normalizePublisherName, setTemplateName } from './publisher-names.js';
 import type { Db } from './db.js';
 import { addressOfPublicKey, setReviewHidden } from './user-reviews.js';
 import { addUserAddresses, createUser, deleteUser, listUsers, removeUserAddress, renameUser, resolveNames } from './user-names.js';
@@ -270,6 +271,26 @@ export function registerAdminRoutes(app: FastifyInstance, db: Db, auth: AdminAut
         await logAction(db, request.admin!.label, 'categories', identifier, categories.join(', ') || '(none)');
 
         return { identifier, categories };
+    });
+
+    // Moderators can set or clear the name shown as a template's publisher. It wins over every other name for that template.
+    app.put('/api/admin/templates/:identifier/publisher-name', { preHandler: requireAdmin }, async (request, reply) => {
+        const { identifier } = request.params as { identifier: string };
+        const name = normalizePublisherName((request.body as { name?: unknown } | undefined)?.name);
+
+        if (!(await getSummary(db, identifier))) {
+            return reply.status(404).send({ error: 'Template not found.' });
+        }
+
+        if (name) {
+            await setTemplateName(db, identifier, name, 'admin');
+        } else {
+            await clearTemplateName(db, identifier);
+        }
+
+        await logAction(db, request.admin!.label, 'publisher-name', identifier, name ?? '(cleared)');
+
+        return { identifier, publisherName: (await getSummary(db, identifier))?.publisherName ?? null };
     });
 
     app.get('/api/admin/user-reviews', { preHandler: requireAdmin }, async (request) => {
