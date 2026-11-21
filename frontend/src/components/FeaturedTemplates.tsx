@@ -3,8 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import {
   ArrowUpRight,
-  Copy,
-  Check,
   ShieldCheck,
   Sparkles,
   Search,
@@ -13,62 +11,23 @@ import {
   Layers3,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { templatePath, useTemplateCardClick } from "../hub/useTemplateCardClick";
+import type { Summary } from "../hub/api";
+import { TemplateCard } from "./hub/TemplateCard";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
-interface Template {
-  name?: string;
-  description?: string;
-  identifier: string;
-  badge?: string;
-  flagged?: boolean;
-  blurb?: string;
-}
+/** A featured template: a registry summary plus the editor's note. */
+type Template = Summary & { blurb?: string };
 
 interface SpotlightResponse {
   items?: Template[];
 }
 
-interface BadgeStyle {
-  label: string;
-  className: string;
-  dot: string;
-}
-
-const badgeStyles: Record<string, BadgeStyle> = {
-  unchecked: {
-    label: "Unchecked",
-    className: "border-white/10 bg-white/[0.04] text-white/50",
-    dot: "bg-white/40",
-  },
-  "auto-checked": {
-    label: "Auto-checked",
-    className: "border-cyan-500/20 bg-cyan-500/[0.07] text-cyan-400",
-    dot: "bg-cyan-400",
-  },
-  reviewed: {
-    label: "Reviewed",
-    className: "border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-400",
-    dot: "bg-emerald-400",
-  },
-};
-
-function getBadge(value: string | undefined): BadgeStyle {
-  const normalized = String(value || "unchecked")
-    .toLowerCase()
-    .replaceAll("_", "-");
-
-  return badgeStyles[normalized] ?? badgeStyles.unchecked;
-}
-
 function FeaturedTemplates() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const openTemplateFromCard = useTemplateCardClick();
 
   const fetchSpotlight = async (): Promise<void> => {
     try {
@@ -108,29 +67,16 @@ function FeaturedTemplates() {
       const name = template.name || "";
       const description = template.description || "";
       const identifier = template.identifier || "";
+      const publisher = template.publisherName ?? template.publisher ?? "";
 
       return (
+        publisher.toLowerCase().includes(query) ||
         name.toLowerCase().includes(query) ||
         description.toLowerCase().includes(query) ||
         identifier.toLowerCase().includes(query)
       );
     });
   }, [templates, searchQuery]);
-
-  const copyIdentifier = async (identifier: string): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(identifier);
-      setCopiedId(identifier);
-
-      window.setTimeout(() => {
-        setCopiedId((current) =>
-          current === identifier ? null : current
-        );
-      }, 1800);
-    } catch {
-      setCopiedId(null);
-    }
-  };
 
   const handleSearchChange = (
     event: ChangeEvent<HTMLInputElement>
@@ -271,131 +217,9 @@ function FeaturedTemplates() {
         {/* Template cards */}
         {!loading && !error && filteredTemplates.length > 0 && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:gap-6 3xl:gap-8">
-            {filteredTemplates.map((template, index) => {
-              const identifier = template.identifier;
-              const badge = getBadge(template.badge);
-
-              return (
-                <article
-                  key={identifier}
-                  style={{ animationDelay: `${index * 120}ms` }}
-                  onClick={(event) => openTemplateFromCard(event, identifier)}
-                  onAuxClick={(event) => openTemplateFromCard(event, identifier)}
-                  className="featured-card group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-5 opacity-0 transition-all duration-300 hover:-translate-y-1.5 hover:border-orange-500/35 hover:bg-white/[0.045] hover:shadow-[0_18px_50px_rgba(0,0,0,0.20)] 2xl:rounded-3xl 2xl:p-7 3xl:p-9 4xl:p-10"
-                >
-                  {/* Top accent */}
-                  <div className="absolute left-0 top-0 h-[2px] w-0 bg-gradient-to-r from-orange-400 to-violet-500 transition-all duration-500 group-hover:w-full" />
-
-                  {/* Card heading */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-orange-500/10 bg-orange-500/[0.05] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 2xl:h-14 2xl:w-14 2xl:rounded-2xl">
-                      <ShieldCheck
-                        size={21}
-                        className="text-orange-400 2xl:h-6 2xl:w-6"
-                      />
-                    </div>
-
-                    <span className="rounded-full border border-white/[0.08] bg-white/[0.025] px-3 py-1 text-[10px] font-medium text-white/45 2xl:px-4 2xl:py-1.5 2xl:text-xs">
-                      XO Template
-                    </span>
-                  </div>
-
-                  {/* Details */}
-                  <div className="mt-5 2xl:mt-7 3xl:mt-8">
-                    <h3 className="text-lg font-semibold text-white transition-colors duration-300 group-hover:text-orange-400 2xl:text-xl 3xl:text-2xl">
-                      <Link
-                        to={templatePath(identifier)}
-                        className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70"
-                      >
-                        {template.name || "Untitled template"}
-                      </Link>
-                    </h3>
-
-                    <p className="mt-2 min-h-[48px] text-xs leading-6 text-white/40 2xl:mt-3 2xl:min-h-[64px] 2xl:text-sm 2xl:leading-7 3xl:text-base">
-                      {template.description ||
-                        "Explore this template's structure and available information."}
-                    </p>
-                  </div>
-
-                  {/* Identifier */}
-                  <div
-                    data-card-ignore
-                    className="mt-5 cursor-text rounded-xl border border-white/[0.06] bg-white/[0.015] px-3.5 py-3 2xl:mt-7 2xl:rounded-2xl 2xl:px-5 2xl:py-4"
-                  >
-                    <div className="mb-2 flex items-center justify-between 2xl:mb-3">
-                      <span className="select-none text-[9px] font-semibold uppercase tracking-[0.16em] text-white/30 2xl:text-[11px]">
-                        Template identifier
-                      </span>
-
-                      {identifier && (
-                        <button
-                          type="button"
-                          onClick={() => void copyIdentifier(identifier)}
-                          aria-label="Copy template identifier"
-                          className="rounded-md p-1 text-white/35 transition-colors hover:bg-white/10 hover:text-orange-400 2xl:rounded-lg 2xl:p-2"
-                        >
-                          {copiedId === identifier ? (
-                            <Check
-                              size={13}
-                              className="text-emerald-400"
-                            />
-                          ) : (
-                            <Copy size={13} />
-                          )}
-                        </button>
-                      )}
-                    </div>
-
-                    <code
-                      className="block select-all truncate text-[11px] text-white/65 2xl:text-sm"
-                      title={identifier || undefined}
-                    >
-                      {identifier || "Identifier unavailable"}
-                    </code>
-                  </div>
-
-                  {/* Badge and flags */}
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 2xl:mt-6 2xl:gap-4">
-                    <span className="text-[11px] text-white/40 2xl:text-sm">
-                      Registry status
-                    </span>
-
-                    <div className="flex flex-wrap items-center gap-2 2xl:gap-3">
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium 2xl:gap-2 2xl:px-3.5 2xl:py-1.5 2xl:text-xs ${badge.className}`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${badge.dot}`}
-                        />
-                        {badge.label}
-                      </span>
-
-                      {template.flagged && (
-                        <span className="rounded-full border border-red-500/20 bg-red-500/[0.07] px-2.5 py-1 text-[10px] font-medium text-red-400 2xl:px-3.5 2xl:py-1.5 2xl:text-xs">
-                          Flagged
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Spotlight blurb */}
-                  {template.blurb && (
-                    <p className="mt-4 border-l-2 border-orange-500/40 pl-3 text-xs italic leading-6 text-white/45 2xl:mt-6 2xl:pl-4 2xl:text-sm 2xl:leading-7">
-                      {template.blurb}
-                    </p>
-                  )}
-
-                  {/* Open hint: the whole card opens the template */}
-                  <div className="mt-auto flex justify-end border-t border-white/[0.07] pt-4 text-white/55 transition-colors duration-300 group-hover:text-orange-400 2xl:pt-5">
-                    <ArrowUpRight
-                      size={16}
-                      aria-hidden="true"
-                      className="transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-                    />
-                  </div>
-                </article>
-              );
-            })}
+            {filteredTemplates.map((template) => (
+              <TemplateCard key={template.identifier} template={template} blurb={template.blurb || undefined} />
+            ))}
           </div>
         )}
 
@@ -473,31 +297,6 @@ function FeaturedTemplates() {
         </div>
       </div>
 
-      {/* Animations */}
-      <style>{`
-        @keyframes featuredFadeUp {
-          from {
-            opacity: 0;
-            transform: translateY(22px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .featured-card {
-          animation: featuredFadeUp 0.65s ease-out forwards;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .featured-card {
-            animation: none;
-            opacity: 1;
-            transform: none;
-          }
-        }
-      `}</style>
     </section>
   );
 }
