@@ -30,6 +30,8 @@ type CommitParameters = Parameters<InvitationBuilder['createUnsignedCommit']>[0]
 export interface InvitationDraft {
     builder: InvitationBuilder;
     commit: (parameters: CommitParameters) => string;
+    /** The invitation so far, as XO extended JSON. */
+    serialize: () => string;
 }
 
 export interface FinishedInvitation {
@@ -78,7 +80,65 @@ export function startInvitation(parameters: { templateIdentifier: string; action
         return invitationCommit.commitIdentifier;
     };
 
-    return { builder, commit };
+    return { builder, commit, serialize: () => serializeInvitation(builder.build()) };
+}
+
+export interface UnsignedInvitation {
+    serializedInvitation: string;
+    invitationIdentifier: string;
+    /** The transaction XO builds from the invitation, with placeholder unlocking bytecode where signatures will go. */
+    transaction: TransactionBch;
+    expiresAt: Date;
+}
+
+/**
+ * Checks an invitation the importing wallet still has to complete (add its keys, outputs and change, and sign): XO's
+ * validation must pass. Nothing more can be built until the wallet has added its part.
+ */
+export function checkIncompleteInvitation(parameters: { draft: InvitationDraft; template: Template; network: Network }): Omit<UnsignedInvitation, 'transaction'> {
+    const { draft, template, network } = parameters;
+    const serializedInvitation = draft.serialize();
+    const invitation: Invitation = deserializeInvitation(serializedInvitation);
+    const issues = listInvitationValidationIssues(invitation, template, network);
+
+    if (issues.length > 0) {
+        throw new InvitationCheckError('XO rejected the invitation.', issues.map((issue) => `${issue.name}: ${issue.message}`));
+    }
+
+    return {
+        serializedInvitation,
+        invitationIdentifier: invitation.invitationIdentifier,
+        expiresAt: new Date(Math.min(...invitation.commits.map((commit) => Number(commit.expiresAtTimestamp)))),
+    };
+}
+
+/**
+ * Checks an invitation the importing wallet still has to sign. XO's validation must pass and XO must build the
+ * transaction; the VM can't run until the signatures exist, so callers check the built outputs themselves.
+ */
+export function checkUnsignedInvitation(parameters: { draft: InvitationDraft; template: Template; actionIdentifier: string; network: Network }): UnsignedInvitation {
+    const { draft, template, actionIdentifier, network } = parameters;
+    const serializedInvitation = draft.serialize();
+    const invitation: Invitation = deserializeInvitation(serializedInvitation);
+    const issues = listInvitationValidationIssues(invitation, template, network);
+
+    if (issues.length > 0) {
+        throw new InvitationCheckError('XO rejected the invitation.', issues.map((issue) => `${issue.name}: ${issue.message}`));
+    }
+
+    const built = buildInvitationTransactionFromMergedCommit(mergeInvitationCommits(invitation, template), template, actionIdentifier);
+    const transaction = decodeTransactionBch(hexToBin(built.serializedTransaction));
+
+    if (typeof transaction === 'string') {
+        throw new InvitationCheckError('XO built a transaction that does not decode.', [transaction]);
+    }
+
+    return {
+        serializedInvitation,
+        invitationIdentifier: invitation.invitationIdentifier,
+        transaction,
+        expiresAt: new Date(Math.min(...invitation.commits.map((commit) => Number(commit.expiresAtTimestamp)))),
+    };
 }
 
 /**

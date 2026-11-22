@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { BadgerReleasePanel } from './components/BadgerReleasePanel';
 import { DripMinePanel } from './components/DripMinePanel';
 import { TokenBurnerPanel } from './components/TokenBurnerPanel';
+import { TokenVaultPanel } from './components/TokenVaultPanel';
 import { Pill, cardClass } from './components/ui';
 
 /** Templates in this workspace. Those with a panel can make invitations; the URL hash (#drip-mine) picks one. */
@@ -14,6 +15,7 @@ const TEMPLATES: { name: string; folder: string; panel?: () => ReactNode }[] = [
     { name: 'Block Points', folder: 'block-points' },
     { name: 'Badgers Stake', folder: 'badgers-stake', panel: () => <BadgerReleasePanel /> },
     { name: 'Revenue Split', folder: 'revenue-split' },
+    { name: 'Token Vault', folder: 'token-vault', panel: () => <TokenVaultPanel /> },
 ];
 
 const fromHash = (): string => {
