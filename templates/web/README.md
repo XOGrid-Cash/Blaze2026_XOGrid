@@ -2,7 +2,7 @@
 
 A small page for building XO invitations for the templates in this workspace, so they can be imported into an XO wallet without writing a script. It is styled like `frontend/` but is not part of the site.
 
-Templates so far: **Drip Mine** and **Token Burner**; pick one in the sidebar or with the URL hash (`#drip-mine`, `#token-burner`). The others are listed as "not yet".
+Templates so far: **Drip Mine**, **Token Burner**, **Badgers Stake** (releases) and **Token Vault** (releases); pick one in the sidebar or with the URL hash (`#drip-mine`, `#token-burner`, `#badgers-stake`, `#token-vault`). The others are listed as "not yet".
 
 ```bash
 cd templates
@@ -73,6 +73,27 @@ Deposits aren't built here. They spend the wallet's own coins, so the XO wallet 
 
 **Message limit: 219 bytes, not 220.** The template says "up to 220 bytes", but Libauth's standardness check counts the `OP_RETURN` script's length byte toward the 223-byte data-carrier limit. So a 220-byte message measures 224 and fails the VM check this page runs. The template is unchanged, because editing its description would change its identifier.
 
+## Token Vault (`#token-vault`)
+
+The page runs a vault's whole life. A guide at the top explains what is needed, which tokens are which, how to bring tokens in from another wallet, and how the page and the XO wallet split the work; **Download template.json** saves the template to import in the wallet.
+
+**1 · Lock**
+1. Pick the network and paste the address of your XO wallet that holds the tokens (and some BCH). The page lists its fungible tokens, its plain BCH and its coins at output 0.
+2. Pick the token and type its decimals (the chain stores base units; the page doesn't look up token metadata), then the amount, the reward per block, the halving length and the start block (the current block by default). The page shows the schedule: each era's blocks, reward and tokens, and roughly when the vault empties.
+3. **Build lock invitation**. The page picks the token coins, a coin at output 0 (its transaction hash becomes the state NFT's category) and enough BCH for the first fee coin, the vault's two coins and the fee; it tells you what to send if something is missing. Other tokens and NFTs on the address are never spent.
+4. Copy the invitation and import it in your XO wallet as **Owner**. The wallet generates the vault key, adds the vault's outputs and its change, signs and broadcasts.
+
+This invitation is **incomplete on purpose**: the vault's addresses depend on a key only the wallet has. The page checks it with XO's validation; `test/token-vault-lock.test.ts` completes it the way the wallet does and runs it in the VM.
+
+**2 · Manage**
+1. Enter the lock transaction id (and the token's decimals). The page reads the vault record in that transaction (`OP_RETURN "TVLT" <owner public key> <halving length>`), rebuilds the vault's and the owner's addresses, and shows the state: tokens left, last release, next halving, whether a fee coin is ready, and when the vault empties.
+2. Pick a block to release up to: after the last release, and at most the current block. **Build release**, copy, import into **the wallet that locked the vault** as Owner, sign and broadcast. When the release would take everything left, the page builds the final release instead, and the vault closes.
+3. Each release spends a plain BCH coin at output 0 of the owner's address (the new state NFT is minted from it). The lock makes the first one; after that, **Build a fee coin invitation** makes an `addFeeCoin` invitation for your wallet to pay for.
+
+Release invitations hold everything except signatures. The page checks that XO validates them and builds the transaction with the right locktime, inputs and outputs; `test/token-vault-invitation.test.ts` signs those transactions with a test owner key and runs them in the VM.
+
+On 2026-11-21 a vault's whole life ran on chipnet from this page's invitations; see token-vault/README.md, "Chipnet".
+
 ## How it works
 
 - Everything runs in the browser. Nothing is broadcast from this page; the wallet that imports the invitation broadcasts it.
@@ -109,4 +130,4 @@ Deposits aren't built here. They spend the wallet's own coins, so the XO wallet 
 
 ## Adding a template
 
-Add `src/lib/<system>.ts`, which builds the commits with `startInvitation` and checks them with `finishInvitation`. Then add a panel in `src/components/`, which can reuse `common.tsx` (network toggle, address, coin loading) and `InvitationResult`, and give the template a `panel` in `App.tsx`.
+Add `src/lib/<system>.ts`, which builds the commits with `startInvitation` and checks them with `finishInvitation` (or `checkUnsignedInvitation`, when the importing wallet still has to sign). Then add a panel in `src/components/`, which can reuse `common.tsx` (network toggle, address, coin loading) and `InvitationResult`, and give the template a `panel` in `App.tsx`.

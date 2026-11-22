@@ -25,6 +25,8 @@ export interface FinishOptions {
     label: string;
     /** Add change when there is enough left over. False for transactions whose shape must not change (a burn). */
     addChange?: boolean;
+    /** Sign this wallet's reserved inputs. False when the caller already signed them (signing twice conflicts). */
+    sign?: boolean;
 }
 
 /**
@@ -34,7 +36,7 @@ export interface FinishOptions {
 export async function signAndBroadcast(
     engine: Engine,
     invitationIdentifier: string,
-    { folder, label, addChange = true }: FinishOptions,
+    { folder, label, addChange = true, sign = true }: FinishOptions,
 ): Promise<{ transactionHash: string; serializedTransaction?: string }> {
     if (addChange) {
         const leftover = await engine.calculateChange(invitationIdentifier);
@@ -48,7 +50,7 @@ export async function signAndBroadcast(
         }
     }
 
-    for (const inputIndex of await engine.listOwnInputIndexes(invitationIdentifier)) {
+    for (const inputIndex of sign ? await engine.listOwnInputIndexes(invitationIdentifier) : []) {
         await engine.signInvitation(invitationIdentifier, inputIndex);
     }
 

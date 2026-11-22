@@ -4,7 +4,7 @@
  */
 import { binToHex, sha256 } from '@bitauth/libauth';
 import { ElectrumClient } from '@electrum-cash/network';
-import type { Network } from './invitation';
+import type { Network } from './invitation.js';
 
 const HOSTS: Record<Network, string[]> = {
     chipnet: ['chipnet.imaginary.cash', 'chipnet.bch.ninja'],
@@ -125,4 +125,13 @@ export async function listUnspentCoins(network: Network, lockingBytecode: Uint8A
             tokensMayBeHidden,
         };
     });
+}
+
+/** A transaction's raw hex, by its display-order hash. */
+export async function getTransactionHex(network: Network, transactionHash: string): Promise<string> {
+    if (!/^[0-9a-f]{64}$/i.test(transactionHash)) {
+        throw new Error('Enter a 64-character transaction id.');
+    }
+
+    return withClient(network, async (request) => String(await request('blockchain.transaction.get', transactionHash.toLowerCase())));
 }

@@ -24,12 +24,15 @@ const COMPILERS = [
 ];
 
 /**
- * Adopted files that have no pragma, kept verbatim and pinned to the compiler that reproduces their deployed bytecode.
- * Keys are paths relative to templates/, with forward slashes.
+ * Adopted files kept verbatim and pinned to the compiler that reproduces their deployed bytecode: files with no pragma,
+ * or with an open-ended one (`>=0.9.3`). Keys are paths relative to templates/, with forward slashes.
  */
-const PINNED_WITHOUT_PRAGMA: Record<string, (typeof COMPILERS)[number]['version']> = {
+const PINNED: Record<string, (typeof COMPILERS)[number]['version']> = {
     // Uses tx.age, which cashc 0.14 removed; 0.9.3 compiles it to the live Drip Mine redeem script.
     'drip-mine/drip-mine.cash': '0.9.3',
+    // `pragma cashscript >=0.9.3`, built upstream with 0.10.0-next.5; 0.10.0-next.4 reproduces that bytecode exactly.
+    // cashc 0.14 rejects its bytes8(int) casts.
+    'token-vault/TokenVault_Release.cash': '0.10.0-next.4',
 };
 
 const root = join(import.meta.dirname, '..');
@@ -40,7 +43,7 @@ const systems = readdirSync(root).filter(
 
 function compilerFor(file: string): (typeof COMPILERS)[number] {
     const pragma = /pragma\s+cashscript\s+([^;]+);/.exec(readFileSync(file, 'utf8'))?.[1]?.trim();
-    const pinned = pragma === undefined ? PINNED_WITHOUT_PRAGMA[relative(root, file).replaceAll('\\', '/')] : undefined;
+    const pinned = PINNED[relative(root, file).replaceAll('\\', '/')];
     const compiler = COMPILERS.find((candidate) => (pinned ? candidate.version === pinned : pragma && candidate.pragma.test(pragma)));
 
     if (!compiler) {

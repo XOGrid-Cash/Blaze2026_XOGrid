@@ -13,12 +13,13 @@ The method follows the guide [Building a BCH XO Template for a Smart Contract](h
 | [drip-mine](drip-mine/) | Chipnet verified (fund, drip, terminate); 26 offline tests | `346048b296ba8a35dc44caddd80d5387aba3e3a0be973a568af804699b7f1185` | [`drip-mine.cash`](https://gitlab.com/0353F40E/drip-mine/-/blob/5893d50ee9a531e0a31c6a637c3f2213509e8c02/drip-mine.cash) (0353F40E/drip-mine `5893d50e`, MIT-0), used unchanged; live at [vox.cash/drip](https://vox.cash/drip) ([2qx/vox](https://github.com/2qx/vox), Unlicense) | bitcoincashautist; 2qx (vox app) |
 | [revenue-split](revenue-split/) | Chipnet verified (fund + payout, earlier identifier `9674cee2…`); 23 offline tests | `b17ba2ee55b392f959155a9b86d58137ebfef783041c092496ddb887f9d8654e` | Draft [`RevenueSplit.cash`](https://github.com/XOGrid-Cash/Blaze2026_XOGrid/blob/8267aec7042fac07662ec5b2e765643d834fa127/contracts/RevenueSplit.cash) (XOGrid commit `8267aec`) | angelnath |
 | [token-burner](token-burner/) | Chipnet verified (deposits of tokens and BCH, single and batch burns); 21 offline tests | `1ef44c322bbcd2db0f376b9359a1255a6560e0365a21d8811c4d85b3b57247e0` | [`burner.cash`](https://gitlab.com/dagurval/contract-burner/-/blob/f20240756800e07c091f35e0227967e7db8727d3/burner.cash) (dagurval/contract-burner `f2024075`, MIT per its README), used unchanged; live at [tokenburner.cash](https://www.tokenburner.cash/) | Dagur Valberg Johannsson |
+| [token-vault](token-vault/) | Chipnet verified (full lifecycle from the template tools page: lock, releases incl. halving and final, fee coins); 30 offline tests, 16 page tests | `d27bf857f00a61f15632993bea305f9c11964e1c55f0fbb4c6ec6227eb4e55f3` | [`TokenVault_Release.cash`](https://github.com/foldingcash/smart-contracts/blob/0604bfbabc711a7a74af24b8535e71476922f7c0/TokenVault/TokenVault_Release.cash) (foldingcash/smart-contracts `0604bfba`, MIT), used unchanged | FoldingCash |
 
 **Status levels**: Draft → Tested offline → Chipnet verified → Reviewed. Update the row in the same change that moves a system forward.
 
 ## Dev tool: template tools
 
-[`web/`](web/) is a dev-only page, styled like `frontend/`, that builds ready-to-import XO invitations for these templates (Drip Mine and Token Burner so far). Run `npm run web` and open http://127.0.0.1:5180, or build the nginx image here with `docker build -t xogrid-template-tools .`. See [web/README.md](web/README.md).
+[`web/`](web/) is a dev-only page, styled like `frontend/`, that builds ready-to-import XO invitations for these templates (Drip Mine, Token Burner, Badgers Stake releases and Token Vault releases so far). Run `npm run web` and open http://127.0.0.1:5180, or build the nginx image here with `docker build -t xogrid-template-tools .`. See [web/README.md](web/README.md).
 
 ## Layout of a system
 
