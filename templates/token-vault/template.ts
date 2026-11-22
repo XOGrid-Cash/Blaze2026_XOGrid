@@ -26,6 +26,10 @@
  * Token fields (category, amount, NFT commitment) are evaluated by the engine as text, so the state commitments are
  * built as hex text with the helper scripts below. test/template.test.ts checks them against the contract's bytes.
  *
+ * A token field's `$(…)` runs in the VM under the BCH 2026 operation cost limit (32,800 for an evaluation), and a wallet
+ * that goes over it may write an empty field. So the 24 state bytes are turned into hex text in one pass of whole-string
+ * shifts, masks and arithmetic rather than a loop over each digit. test/template.test.ts runs every commitment under that limit.
+ *
  * Run `npm run template:json` after any change to regenerate template.json.
  */
 import artifactJson from './artifact/TokenVault_Release.json' with { type: 'json' };
@@ -455,16 +459,26 @@ const tokenVaultTemplate = {
         checkMoreLeft: 'tokensLeft OP_0 OP_GREATERTHAN OP_VERIFY',
         checkNoneLeft: 'tokensLeft OP_0 OP_LESSTHANOREQUAL OP_VERIFY',
 
-        // State commitments, as hex text: three 8-byte little-endian numbers (the contract's bytes8).
-        initialStateCommitment: '<startHeight> bytes8HexText <startHeight> bytes8HexText OP_CAT <reward> bytes8HexText OP_CAT',
-        stateCommitment: '<releaseHeight> bytes8HexText <halvingHeight> bytes8HexText OP_CAT <reward> bytes8HexText OP_CAT',
-        nextStateCommitment: 'nextReleaseHeight bytes8HexText nextHalvingHeight bytes8HexText OP_CAT nextReward bytes8HexText OP_CAT',
-        bytes8HexText: '<8> OP_NUM2BIN binToHexText',
+        // State commitments, as hex text: three 8-byte little-endian numbers (the contract's bytes8), 48 characters.
+        initialStateCommitment: '<startHeight> <8> OP_NUM2BIN OP_DUP OP_CAT <reward> <8> OP_NUM2BIN OP_CAT bytes24HexText',
+        stateCommitment: '<releaseHeight> <8> OP_NUM2BIN <halvingHeight> <8> OP_NUM2BIN OP_CAT <reward> <8> OP_NUM2BIN OP_CAT bytes24HexText',
+        nextStateCommitment: 'nextReleaseHeight <8> OP_NUM2BIN nextHalvingHeight <8> OP_NUM2BIN OP_CAT nextReward <8> OP_NUM2BIN OP_CAT bytes24HexText',
 
-        // Bytes to hex text: a nibble (0-15), a byte (0-255), and any non-empty byte string.
-        hexNibble: 'OP_DUP <10> OP_LESSTHAN OP_IF <48> OP_ELSE <87> OP_ENDIF OP_ADD <1> OP_NUM2BIN',
-        hexByte: 'OP_DUP <16> OP_DIV hexNibble OP_SWAP <16> OP_MOD hexNibble OP_CAT',
-        binToHexText: 'OP_0 OP_SWAP OP_BEGIN OP_1 OP_SPLIT OP_SWAP <0x00> OP_CAT OP_BIN2NUM hexByte OP_ROT OP_SWAP OP_CAT OP_SWAP OP_SIZE OP_0 OP_NUMEQUAL OP_UNTIL OP_DROP',
+        // 24 bytes to their 48-character hex text, with whole-string steps rather than a loop over each digit (whose
+        // cost would go over the limit). Padded to 64 bytes, byte i moves to position 2i in five shift-and-mask rounds;
+        // the even copies keep the high nibble (shifted down) and the next position gets the low nibble, so each byte
+        // holds one digit (0-15); adding 48, plus 39 more where the digit is 10 or above, makes '0'-'9' and 'a'-'f'.
+        bytes24HexText:
+            '<0x00000000000000000000000000000000000000000000000000000000000000000000000000000000> OP_CAT ' +
+            'OP_DUP <0x00000000000000000000000000000000> OP_SWAP OP_CAT <64> OP_SPLIT OP_DROP OP_OR <0xffffffffffffffffffffffffffffffff00000000000000000000000000000000ffffffffffffffffffffffffffffffff00000000000000000000000000000000> OP_AND ' +
+            'OP_DUP <0x0000000000000000> OP_SWAP OP_CAT <64> OP_SPLIT OP_DROP OP_OR <0xffffffffffffffff0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff0000000000000000> OP_AND ' +
+            'OP_DUP <0x00000000> OP_SWAP OP_CAT <64> OP_SPLIT OP_DROP OP_OR <0xffffffff00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff00000000> OP_AND ' +
+            'OP_DUP <0x0000> OP_SWAP OP_CAT <64> OP_SPLIT OP_DROP OP_OR <0xffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000> OP_AND ' +
+            'OP_DUP <0x00> OP_SWAP OP_CAT <64> OP_SPLIT OP_DROP OP_OR <0xff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00> OP_AND ' +
+            'OP_DUP <0xf000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000> OP_AND <0x00> OP_CAT OP_BIN2NUM <16> OP_DIV ' +
+            'OP_SWAP <0x0f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f000f00> OP_AND <0x00> OP_SWAP OP_CAT <64> OP_SPLIT OP_DROP <0x00> OP_CAT OP_BIN2NUM OP_ADD ' +
+            'OP_DUP <0x06060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606060606> OP_ADD <16> OP_DIV <64> OP_NUM2BIN <0x01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101> OP_AND <0x00> OP_CAT OP_BIN2NUM ' +
+            '<39> OP_MUL OP_ADD <0x30303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030303030> OP_ADD <64> OP_NUM2BIN <48> OP_SPLIT OP_DROP',
     },
     constants: {
         maximumHeight: {

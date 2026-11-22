@@ -9,7 +9,7 @@ This template wraps FoldingCash's **TokenVault_Release contract unchanged**. Eac
 | Status | Chipnet verified 2026-11-21: the full lifecycle (lock, a release that stops at a halving, fee coins, a normal release, the final release) from the template tools page's invitations, finished by an XO wallet; accepted by chipnet, unconfirmed when recorded. 30 offline tests, 16 page tests. Blaze Tool check pending. |
 | Contract | [`TokenVault_Release.cash`](TokenVault_Release.cash), verbatim from upstream, rebuilt with cashc 0.10.0-next.4: the same bytecode as upstream's 0.10.0-next.5 artifact. 294-byte redeem script with a 33-byte key, 246 opcodes. |
 | Template | [`template.ts`](template.ts) → [`template.json`](template.json) |
-| Template identifier | `d27bf857f00a61f15632993bea305f9c11964e1c55f0fbb4c6ec6227eb4e55f3` |
+| Template identifier | `cb0d4c59da37b307d41255c755368518529657b1d1eaa6c69358af50a162c07e` |
 | Invitation tool | `web/` page, `#token-vault`: a guide, then lock, release, fee coin and final release invitations for the owner's XO wallet to finish |
 
 ## Credits
@@ -71,7 +71,7 @@ The contract is deployed with tokens locked in it, and changing a byte would sep
 
 **The release maths.** XO output values can't read input values, so the release takes the vault's coins as variables: token amount, satoshis, state and categories. A tool fills them in from the chain (role `provider`). Every output is then computed with the contract's formulas (`releaseAmount`, `tokensLeft`, `nextStateCommitment`). Wrong values can't move anything the contract doesn't allow: the contract rejects the spend.
 
-**Commitments as hex text.** The engine evaluates token fields as text. The state commitments are built as hex text with `bytes8HexText` and `binToHexText` (the same loop helper as Badgers Stake), and the tests check them against the contract's bytes.
+**Commitments as hex text.** The engine evaluates token fields as text, so the state commitments are built as hex text by `bytes24HexText`: the 24 state bytes go through a few whole-string shifts, masks and additions instead of a loop over each digit. That keeps each commitment's evaluation well under the BCH 2026 operation cost limit (32,800 for an evaluation; the state commitments cost about 15,000 to 19,000), which a wallet enforces when it evaluates the field. The tests check every commitment against the contract's bytes, with every hex digit, and run them under that limit with the largest values.
 
 **The vault record.** `lock` adds a 0-satoshi output, `OP_RETURN "TVLT" <owner public key> <halving length>`. A tool can rebuild both addresses from the lock transaction alone. The contract doesn't see this output.
 
@@ -162,6 +162,10 @@ npx tsx token-vault/scripts/chipnet.ts status
 ```
 
 The release and fee coin invitations come from `web/src/lib/token-vault-core.ts`, the page's own builder. The script saves each one as the page would hand it out, then imports it into the test wallet as `owner`.
+
+### Cheaper state commitment (vault 5)
+
+Run on 2026-11-21 with template `cb0d4c59…c07e`, after the state commitments moved to `bytes24HexText` (the earlier helper went over the BCH 2026 operation cost limit, so a wallet that enforces it wrote an empty commitment). Lock `abb046da75ba452c4eb8ec2055eb2cf3ac03b2d5e4c43f6c136514a764c33a61` (5000 tokens, 1000 per block, halving every 3 blocks, from block 333300; state commitment `f415050000000000f415050000000000e803000000000000`), then release `91d9a0d76301b8dc439ace298234056617e688769ba7c2cc856fdaac8a770e0e` up to the halving at 333302 (3000 tokens).
 
 ### Full lifecycle from the page (vault 4)
 

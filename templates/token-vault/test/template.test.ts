@@ -5,9 +5,19 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { bigIntToVmNumber, binToHex, decodeAuthenticationInstructions, encodeDataPush, hexToBin, type AuthenticationInstructionPush, type Output } from '@bitauth/libauth';
+import {
+    bigIntToVmNumber,
+    binToHex,
+    createCompilerBch,
+    createVirtualMachineBch2026,
+    decodeAuthenticationInstructions,
+    encodeDataPush,
+    hexToBin,
+    type AuthenticationInstructionPush,
+    type Output,
+} from '@bitauth/libauth';
 import { buildCompilerBytecodeDataFromCompilationVariables, completeMergedOutput } from '@xo-cash/engine';
-import { compileCashAssemblyString, generateTemplateIdentifier, parseTemplate, serializeTemplate } from '@xo-cash/utils';
+import { compileCashAssemblyString, extractCashAssemblyEvaluations, generateTemplateIdentifier, parseTemplate, serializeTemplate } from '@xo-cash/utils';
 import { compileString } from 'cashc-0.10';
 import { describe, expect, it } from 'vitest';
 import { runAudit } from '../../../server/src/audit/index.js';
@@ -75,8 +85,45 @@ function resolveOutput(action: string, outputIdentifier: string, lockingBytecode
 }
 
 /** A template script evaluated the way the engine evaluates token fields: variables as text, result read as text. */
-const asText = (script: string, variables: Variables): string =>
-    compileCashAssemblyString({ cashAssemblyText: `$(${script})`, variables, evaluationDecodeMode: 'utf8', templateVariables: template.variables, templateScripts: template.scripts } as never);
+const asText = (cashAssemblyText: string, variables: Variables): string =>
+    compileCashAssemblyString({ cashAssemblyText, variables, evaluationDecodeMode: 'utf8', templateVariables: template.variables, templateScripts: template.scripts } as never);
+
+/** The NFT commitment text a template output or input writes. */
+const commitmentOf = (identifier: string): string => ((template.outputs?.[identifier] ?? template.inputs?.[identifier]) as { token: { nft: { commitment: string } } }).token.nft.commitment;
+
+/**
+ * Runs each `$(…)` evaluation of a token field in the BCH 2026 VM, as a wallet reduces it, and returns its operation
+ * cost, or the VM's error (for example, over the operation cost limit).
+ */
+function evaluationCosts(cashAssemblyText: string, variables: Record<string, bigint>): Array<{ evaluation: string; cost: number; error?: string }> {
+    const vm = createVirtualMachineBch2026(false);
+
+    return extractCashAssemblyEvaluations(cashAssemblyText).map((evaluation: string) => {
+        const source = evaluation.replace(/^\$\(/, '').replace(/\)$/, '');
+        const compiler = createCompilerBch({
+            scripts: { ...(template.scripts as Record<string, string>), probe: source },
+            variables: Object.fromEntries(Object.keys(variables).map((name) => [name, { type: 'WalletData' as const }])),
+        });
+        const compiled = compiler.generateBytecode({ scriptId: 'probe', data: { bytecode: Object.fromEntries(Object.entries(variables).map(([name, value]) => [name, bigIntToVmNumber(value)])) } });
+
+        if (!compiled.success) {
+            throw new Error(JSON.stringify(compiled.errors));
+        }
+
+        const state = vm.evaluate({
+            inputIndex: 0,
+            sourceOutputs: [{ lockingBytecode: compiled.bytecode, valueSatoshis: 0n }],
+            transaction: {
+                version: 2,
+                locktime: 0,
+                inputs: [{ outpointTransactionHash: new Uint8Array(32), outpointIndex: 0, sequenceNumber: 0, unlockingBytecode: new Uint8Array() }],
+                outputs: [{ lockingBytecode: new Uint8Array([0x6a]), valueSatoshis: 0n }],
+            },
+        });
+
+        return { evaluation, cost: state.metrics.operationCost, ...(state.error ? { error: state.error } : {}) };
+    });
+}
 
 interface Vault {
     tokens: bigint;
@@ -187,9 +234,33 @@ describe('Token Vault template', () => {
     it('writes the state commitments as the contract’s three 8-byte numbers', () => {
         const state = { releaseHeight: 857_132n, halvingHeight: 857_000n, reward: 250_000_000_000n };
 
-        expect(asText('stateCommitment', { ...state })).toBe(binToHex(stateCommitment(state.releaseHeight, state.halvingHeight, state.reward)));
-        expect(asText('initialStateCommitment', { startHeight: 857_132n, reward: 250_000_000_000n })).toBe(binToHex(stateCommitment(857_132n, 857_132n, 250_000_000_000n)));
-        expect(asText('stateCommitment', { releaseHeight: 0n, halvingHeight: 0n, reward: 1n })).toBe(binToHex(stateCommitment(0n, 0n, 1n)));
+        expect(asText(commitmentOf('vaultStateInput'), { ...state })).toBe(binToHex(stateCommitment(state.releaseHeight, state.halvingHeight, state.reward)));
+        expect(asText(commitmentOf('lockStateOutput'), { startHeight: 857_132n, reward: 250_000_000_000n })).toBe(binToHex(stateCommitment(857_132n, 857_132n, 250_000_000_000n)));
+        expect(asText(commitmentOf('vaultStateInput'), { releaseHeight: 0n, halvingHeight: 0n, reward: 1n })).toBe(binToHex(stateCommitment(0n, 0n, 1n)));
+        // The largest values: the maximum height and the largest token amount as the reward.
+        const largest = { releaseHeight: 499_999_999n, halvingHeight: 499_999_999n, reward: 9_223_372_036_854_775_807n };
+
+        expect(asText(commitmentOf('vaultStateInput'), largest)).toBe(binToHex(stateCommitment(largest.releaseHeight, largest.halvingHeight, largest.reward)));
+        // Every digit value, in both nibbles.
+        expect(asText(commitmentOf('vaultStateInput'), { releaseHeight: 0x0123_4567_89ab_cdefn, halvingHeight: 0x7edc_ba98_7654_3210n, reward: 0x7f80_a5c3_0f1e_2d3cn })).toBe(
+            binToHex(stateCommitment(0x0123_4567_89ab_cdefn, 0x7edc_ba98_7654_3210n, 0x7f80_a5c3_0f1e_2d3cn)),
+        );
+    });
+
+    it('keeps every evaluation of the state commitments under the BCH 2026 operation cost limit', () => {
+        const largest = { startHeight: 499_999_999n, releaseHeight: 499_999_999n, halvingHeight: 499_999_000n, reward: 9_223_372_036_854_775_807n };
+        // The next state after a release at a halving, with the largest values the release can see.
+        const release = { ...largest, blockHeight: 499_999_999n, halvingLength: 999n };
+        const costs = [
+            ...evaluationCosts(commitmentOf('lockStateOutput'), largest),
+            ...evaluationCosts(commitmentOf('vaultStateInput'), largest),
+            ...evaluationCosts(commitmentOf('vaultStateOutput'), release),
+        ];
+
+        expect(costs).toHaveLength(3);
+        expect(costs.filter((cost) => cost.error !== undefined)).toEqual([]);
+        // Leave room under the 32,800 limit of an evaluation with no unlocking bytecode.
+        expect(Math.max(...costs.map((cost) => cost.cost))).toBeLessThan(24_000);
     });
 
     it('builds a lock with the fee coin first, then the vault’s tokens and state NFT', () => {
