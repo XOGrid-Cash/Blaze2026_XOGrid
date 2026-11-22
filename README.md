@@ -99,6 +99,9 @@ Eleven templates are seeded: six built in and five community-sourced. Community 
 | [Badgers Stake](templates/badgers-stake/)                   | Stake BCH for BadgerCoins                                                 | SayoshiNakamario (badgers.cash)                       |
 | [Block Points](templates/block-points/)                     | Coin-age reward vault                                                     | 2qx (vox.cash/bpt)                                    |
 | [Revenue Split](templates/revenue-split/)                   | Pay three fixed recipients at fixed percentages                           | XOGrid                                                |
+| [Token Vault](templates/token-vault/)                       | Lock fungible tokens and release them on a halving schedule               | FoldingCash (foldingcash/smart-contracts)             |
+
+Token Vault is in `templates/`, with its own page in the invitation tool (`templates/web`), but is not seeded in the registry yet.
 
 Badgers Stake's upstream repository states no licence, so its copy is for verification and review, with attribution. See its README.
 
