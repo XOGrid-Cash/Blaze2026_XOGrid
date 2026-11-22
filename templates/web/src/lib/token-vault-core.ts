@@ -276,6 +276,30 @@ export function createTokenVaultTools(template: Template, templateIdentifier: st
         return undefined;
     }
 
+    /**
+     * Finds a vault whose state NFT doesn't hold a state: a token coin and an immutable NFT from the same transaction,
+     * where the NFT's commitment isn't the 24 bytes a release reads (for example, empty).
+     */
+    function readUnreadableVault(coins: UnspentCoin[]): { tokenCoin: UnspentCoin & { token: CoinToken }; commitmentHex: string } | undefined {
+        for (const stateCoin of coins) {
+            const nft = stateCoin.token?.nft;
+
+            if (nft?.capability !== 'none' || readVaultState(nft.commitment) !== undefined) {
+                continue;
+            }
+
+            const tokenCoin = coins.find(
+                (coin) => coin.transactionHash === stateCoin.transactionHash && coin.token && coin.token.amount > 0n && coin.token.nft === undefined,
+            );
+
+            if (tokenCoin) {
+                return { tokenCoin: tokenCoin as UnspentCoin & { token: CoinToken }, commitmentHex: nft.commitment };
+            }
+        }
+
+        return undefined;
+    }
+
     /** Coins at the owner's address that can pay for a release: plain BCH, output 0, large enough. */
     const listFeeCoins = (coins: UnspentCoin[]): UnspentCoin[] => coins.filter((coin) => coin.outputIndex === 0 && !coin.hasTokens && coin.valueSatoshis >= MINIMUM_FEE_COIN);
 
@@ -559,7 +583,6 @@ export function createTokenVaultTools(template: Template, templateIdentifier: st
                 }),
             ),
         });
-
         return { ...checkIncompleteInvitation({ draft, template, network }), plan, schedule: scheduleOf({ lockAmount, reward, halvingLength, startHeight }) };
     }
 
@@ -573,6 +596,7 @@ export function createTokenVaultTools(template: Template, templateIdentifier: st
         vaultScripts,
         addressOf,
         readVaultCoins,
+        readUnreadableVault,
         listFeeCoins,
         buildReleaseInvitation,
         buildAddFeeCoinInvitation,

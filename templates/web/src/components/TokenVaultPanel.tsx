@@ -620,6 +620,21 @@ function ManageSection({ network, onBuilt, onError }: { network: Network; onBuil
                             const vault = tokenVault.readVaultCoins(loaded.coins);
 
                             if (!vault) {
+                                const unreadable = tokenVault.readUnreadableVault(loaded.coins);
+
+                                if (unreadable) {
+                                    const bytes = unreadable.commitmentHex.length / 2;
+
+                                    return (
+                                        <StatusMessage type="error">
+                                            This vault’s state NFT {bytes === 0 ? 'has an empty commitment' : `has a ${bytes}-byte commitment`}. A release reads the release block,
+                                            halving block and reward from that commitment (24 bytes), so this vault can’t be released and its {tokens(unreadable.tokenCoin.token.amount)}{' '}
+                                            tokens stay where they are. This happens when the wallet that finished the lock left the commitment out; check output 2’s commitment
+                                            before broadcasting a lock.
+                                        </StatusMessage>
+                                    );
+                                }
+
                                 return <StatusMessage type="info">The vault’s token coin and state NFT were not found together at this address.</StatusMessage>;
                             }
 

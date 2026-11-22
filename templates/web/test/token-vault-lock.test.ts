@@ -105,6 +105,11 @@ describe('Token Vault lock invitations (web tool)', () => {
         expect(inputs.map((input) => `${binToHex(input.outpointTransactionHash!)}:${input.outpointIndex}`)).toEqual(result.plan.inputs.map((spent) => `${spent.transactionHash}:${spent.outputIndex}`));
         expect(result.schedule[0]?.tokens).toBe(210_000n);
 
+
+        // The page adds no outputs: they all need the vault key, which only the wallet has.
+        expect(invitation.commits.flatMap((commit) => commit.data.outputs ?? [])).toEqual([]);
+        const stateCommitment = encodeVaultState({ releaseHeight: 900_000n, halvingHeight: 900_000n, reward: 1000n });
+
         // The wallet's part: the vault outputs for its new key, then change, then signatures on every coin.
         const feeCoin = variables.feeCoinSatoshis as bigint;
         const record = hexToBin(`6a0454564c5421${binToHex(publicKeyOf(VAULT_KEY))}${binToHex(encodeDataPush(bigIntToVmNumber(VAULT_KEY.halvingLength)))}`);
@@ -114,7 +119,7 @@ describe('Token Vault lock invitations (web tool)', () => {
             {
                 lockingBytecode: vaultLock(VAULT_KEY),
                 valueSatoshis: tokenVault.VAULT_COIN,
-                token: { category: hexToBin('13'.repeat(32)), amount: 0n, nft: { capability: 'none', commitment: encodeVaultState({ releaseHeight: 900_000n, halvingHeight: 900_000n, reward: 1000n }) } },
+                token: { category: hexToBin('13'.repeat(32)), amount: 0n, nft: { capability: 'none', commitment: stateCommitment } },
             },
             { lockingBytecode: record, valueSatoshis: 0n },
             { lockingBytecode: ownerLock(WALLET), valueSatoshis: 800n, token: { category: hexToBin(TOKEN), amount: result.plan.tokenChange } },
@@ -135,5 +140,23 @@ describe('Token Vault lock invitations (web tool)', () => {
         expect(change).toBeGreaterThanOrEqual(546n);
         expect(readVaultRecord(record)).toEqual({ ownerPublicKey: binToHex(publicKeyOf(VAULT_KEY)), halvingLength: 210n });
         expect(verifyRelease(coins, outputs, 0)).toBe(true);
+    });
+
+    it('recognises a vault whose state NFT has no state, so the page can say it can’t be released', () => {
+        const lock = '21'.repeat(32);
+        const vaultCoins: UnspentCoin[] = [
+            coin(lock, 1, 1000n, 100n),
+            { ...coin(lock, 2, 1000n, 0n, '22'.repeat(32)), token: { category: '22'.repeat(32), amount: 0n, nft: { capability: 'none', commitment: '' } } },
+        ];
+
+        expect(tokenVault.readVaultCoins(vaultCoins)).toBeUndefined();
+        expect(tokenVault.readUnreadableVault(vaultCoins)).toMatchObject({ commitmentHex: '', tokenCoin: { outputIndex: 1, token: { amount: 100n } } });
+
+        const healthy = vaultCoins.map((spent) =>
+            spent.token?.nft ? { ...spent, token: { ...spent.token, nft: { capability: 'none' as const, commitment: binToHex(encodeVaultState({ releaseHeight: 1n, halvingHeight: 1n, reward: 1n })) } } } : spent,
+        );
+
+        expect(tokenVault.readVaultCoins(healthy)).toBeDefined();
+        expect(tokenVault.readUnreadableVault(healthy)).toBeUndefined();
     });
 });
