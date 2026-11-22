@@ -50,7 +50,7 @@ const when = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year
 function SectionTitle({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="text-2xl font-bold tracking-tight text-white">{children}</h2>
+      <h2 className="text-xl font-bold tracking-tight text-white">{children}</h2>
       {aside}
     </div>
   );
@@ -72,11 +72,55 @@ function splitNamed(line: string, separator: string): { name: string | null; tex
   return at > 0 && at < 60 ? { name: line.slice(0, at), text: line.slice(at + separator.length) } : { name: null, text: line };
 }
 
+/** Format strings such as bchnote-<network>-bch-<pool category>-<secret> are shown as code, so they read as code and wrap cleanly. */
+/** "The person wrapping BCH. Takes part in: Wrap BCH." -> the description, and what the party takes part in. */
+function takesPartIn(value: string): { about: string; steps: string | null } {
+  const match = /^(.*?)\s*Takes part in:\s*(.+)$/s.exec(value);
+
+  return match ? { about: match[1].trim(), steps: match[2].trim().replace(/\.$/, "") } : { about: value, steps: null };
+}
+
+function withCode(value: string): ReactNode[] {
+  return value.split(/((?:[\w-]*<[^>]+>[\w-]*)+)/g).map((part, index) =>
+    index % 2 === 1 ? (
+      <code key={index} className="rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-[0.85em] text-orange-200 [overflow-wrap:anywhere]">
+        {part}
+      </code>
+    ) : (
+      part
+    ),
+  );
+}
+
+/** A section that starts closed. The whole header is the button, and the count says what is inside before it is opened. */
+function Disclosure({ id, title, count, children }: { id: string; title: string; count: number; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-black/20">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-controls={id}
+        className="flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-3.5 text-left transition hover:bg-white/[0.03] focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400/60"
+      >
+        <span className="flex items-center gap-3">
+          <span className="text-base font-semibold text-white">{title}</span>
+          <span className="rounded-full bg-white/[0.06] px-2.5 py-0.5 text-xs font-semibold text-slate-300">{count}</span>
+        </span>
+        <ChevronDown size={20} className={`shrink-0 text-orange-400 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
+      </button>
+      <div id={id} hidden={!open} className="border-t border-white/[0.06] px-5 pb-5 pt-4">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function HowItWorks({ plain, technical }: { plain: PlainEnglish; technical: boolean }) {
-  const [more, setMore] = useState(false);
-  const showMore = technical || more;
   const hasMore = plain.whoDoesWhat.length > 0 || plain.youWillNeed.length > 0;
-  const body = technical ? "text-sm leading-6" : "text-base leading-7";
+  const body = technical ? "text-[13px] leading-6" : "text-sm leading-6";
 
   return (
     <section id="how" className={`${card} scroll-mt-24`}>
@@ -84,23 +128,24 @@ function HowItWorks({ plain, technical }: { plain: PlainEnglish; technical: bool
       <p className={`mt-3 max-w-3xl text-slate-300 ${body}`}>{plain.summary}</p>
 
       {plain.steps.length > 0 && (
-        <ol className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <ol className="mt-8 max-w-3xl">
           {plain.steps.map((step, index) => {
             const { title, role, text } = splitStep(step);
 
             return (
-              <li key={step} className="flex gap-4 rounded-2xl border border-white/[0.06] bg-black/20 p-5">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-500 text-lg font-bold text-white">
+              <li key={step} className="group relative flex gap-4 pb-8 last:pb-0">
+                <span aria-hidden="true" className="absolute bottom-0 left-4 top-10 w-px bg-white/10 group-last:hidden" />
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white">
                   {index + 1}
                 </span>
                 <div className="min-w-0">
-                  {title && <p className="text-base font-semibold text-white">{title}</p>}
+                  {title && <p className="text-[15px] font-semibold text-white">{title}</p>}
                   {role && (
                     <span className="mt-1 inline-block rounded-full bg-violet-400/10 px-2.5 py-0.5 text-xs font-semibold text-violet-300">
                       {role}
                     </span>
                   )}
-                  <p className={`mt-2 text-slate-300 ${technical ? "text-sm leading-6" : "text-[15px] leading-6"}`}>{text}</p>
+                  <p className={`mt-1.5 text-slate-300 ${technical ? "text-[13px] leading-6" : "text-sm leading-6"}`}>{text}</p>
                 </div>
               </li>
             );
@@ -108,57 +153,56 @@ function HowItWorks({ plain, technical }: { plain: PlainEnglish; technical: bool
         </ol>
       )}
 
-      {hasMore && !technical && (
-        <button
-          type="button"
-          onClick={() => setMore(!more)}
-          aria-expanded={more}
-          aria-controls="how-more"
-          className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-orange-400 hover:text-orange-300"
-        >
-          {more ? "Hide who takes part" : "Who takes part, and what you'll need"}
-          {more ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-      )}
-
-      {hasMore && showMore && (
-        <div id="how-more" className="mt-8 grid gap-8 md:grid-cols-2">
+      {hasMore && (
+        <div className="mt-8 space-y-4">
           {plain.whoDoesWhat.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold text-white">Who takes part</h3>
-              <ul className="mt-3 space-y-3">
-                {plain.whoDoesWhat.map((line) => {
+            <Disclosure id="how-who" title="Who takes part" count={plain.whoDoesWhat.length}>
+              <ul className="divide-y divide-white/[0.06]">
+                {plain.whoDoesWhat.map((line, index) => {
                   const { name, text } = splitNamed(line, ": ");
 
                   return (
-                    <li key={line} className={`text-slate-300 ${body}`}>
-                      {name && <span className="mr-2 rounded-full bg-violet-400/10 px-2.5 py-0.5 text-sm font-semibold text-violet-300">{name}</span>}
-                      {text}
+                    <li key={index} className="py-4 first:pt-0 last:pb-0">
+                      {name && <span className="inline-block rounded-full bg-violet-400/10 px-2.5 py-0.5 text-xs font-semibold text-violet-300">{name}</span>}
+                      {(() => {
+                        const { about, steps } = takesPartIn(text);
+
+                        return (
+                          <>
+                            {about && <p className={`${name ? "mt-2" : ""} max-w-3xl text-slate-300 [overflow-wrap:anywhere] ${body}`}>{withCode(about)}</p>}
+                            {steps && (
+                              <p className="mt-2 max-w-3xl text-xs leading-5 text-slate-400 [overflow-wrap:anywhere]">
+                                <span className="mr-1.5 font-semibold uppercase tracking-wide text-slate-500">Takes part in</span>
+                                {steps}
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
                     </li>
                   );
                 })}
               </ul>
-            </div>
+            </Disclosure>
           )}
           {plain.youWillNeed.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold text-white">What you'll need</h3>
-              <ul className="mt-3 space-y-3">
-                {plain.youWillNeed.map((line) => {
+            <Disclosure id="how-need" title="What you'll need" count={plain.youWillNeed.length}>
+              <ul className="divide-y divide-white/[0.06]">
+                {plain.youWillNeed.map((line, index) => {
                   const { name, text } = splitNamed(line, " - ");
 
                   return (
-                    <li key={line} className={`flex gap-3 text-slate-300 ${body}`}>
-                      <CheckCircle2 size={18} className="mt-1 shrink-0 text-orange-400" />
-                      <span>
-                        {name && <span className="font-semibold text-white">{name}: </span>}
-                        {text}
-                      </span>
+                    <li key={index} className="flex gap-3 py-4 first:pt-0 last:pb-0">
+                      <CheckCircle2 size={16} className="mt-[3px] shrink-0 text-orange-400" />
+                      <div className="min-w-0">
+                        {name && <p className="text-[15px] font-semibold text-white [overflow-wrap:anywhere]">{name}</p>}
+                        <p className={`${name ? "mt-1" : ""} max-w-3xl text-slate-300 [overflow-wrap:anywhere] ${body}`}>{withCode(text)}</p>
+                      </div>
                     </li>
                   );
                 })}
               </ul>
-            </div>
+            </Disclosure>
           )}
         </div>
       )}
@@ -576,10 +620,10 @@ function TemplateDetail() {
 
         {detail && (
           <div className="space-y-6 2xl:space-y-8">
-            {technical && (
+            {sections.length > 1 && (
               <nav
                 aria-label="On this page"
-                className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-white/[0.06] bg-[#05070b]/90 px-5 py-3 text-sm backdrop-blur sm:mx-0 sm:rounded-2xl sm:border"
+                className="sticky top-0 z-20 -mx-4 flex items-center gap-5 overflow-x-auto whitespace-nowrap [scrollbar-width:none] border-b border-white/[0.06] bg-[#05070b]/90 px-5 py-3 text-sm backdrop-blur sm:mx-0 sm:rounded-2xl sm:border"
               >
                 {sections.map((section) => (
                   <a key={section.href} href={section.href} className="font-semibold text-slate-300 transition hover:text-orange-300">
