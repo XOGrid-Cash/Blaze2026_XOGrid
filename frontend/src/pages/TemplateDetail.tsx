@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   XCircle,
   MinusCircle,
   ChevronDown,
+  ChevronUp,
   Code2,
   Flag,
   Copy,
@@ -107,19 +108,21 @@ function HowItWorks({ plain, technical }: { plain: PlainEnglish; technical: bool
         </ol>
       )}
 
-      {hasMore && !showMore && (
+      {hasMore && !technical && (
         <button
           type="button"
-          onClick={() => setMore(true)}
+          onClick={() => setMore(!more)}
+          aria-expanded={more}
+          aria-controls="how-more"
           className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-orange-400 hover:text-orange-300"
         >
-          Who takes part, and what you'll need
-          <ChevronDown size={16} />
+          {more ? "Hide who takes part" : "Who takes part, and what you'll need"}
+          {more ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
       )}
 
       {hasMore && showMore && (
-        <div className="mt-8 grid gap-8 md:grid-cols-2">
+        <div id="how-more" className="mt-8 grid gap-8 md:grid-cols-2">
           {plain.whoDoesWhat.length > 0 && (
             <div>
               <h3 className="text-lg font-semibold text-white">Who takes part</h3>
@@ -327,10 +330,22 @@ function ChecksSummary({ results }: { results: CheckResult[] }) {
   );
 }
 
+const toggleButton =
+  "inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-orange-400/40 hover:text-white";
+
 function Technical({ detail, mode, onShow }: { detail: Detail; mode: ViewMode; onShow: () => void }) {
   const view = useMemo(() => viewTemplate(detail.template), [detail.template]);
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(false);
+  const hiding = useRef(false);
+
+  // The open section is long: after Hide, bring the closed card back into view if it ended up off the screen.
+  useEffect(() => {
+    if (!open && hiding.current) {
+      hiding.current = false;
+      document.getElementById("technical")?.scrollIntoView({ block: "nearest" });
+    }
+  }, [open]);
 
   if (mode === "simple" && !open) {
     return (
@@ -347,7 +362,9 @@ function Technical({ detail, mode, onShow }: { detail: Detail; mode: ViewMode; o
             <button
               type="button"
               onClick={() => setOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-orange-400/40 hover:text-white"
+              aria-expanded={false}
+              aria-controls="technical"
+              className={toggleButton}
             >
               Show
               <ChevronDown size={15} />
@@ -363,9 +380,26 @@ function Technical({ detail, mode, onShow }: { detail: Detail; mode: ViewMode; o
 
   return (
     <div id="technical" className="scroll-mt-24 space-y-6 2xl:space-y-8">
-      <div className="px-1">
-        <h2 className="text-2xl font-bold tracking-tight text-white">Technical details</h2>
-        <p className="mt-1 text-sm text-slate-400">For developers and reviewers: the template file, sources, full contents and the automated checks.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4 px-1">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-white">Technical details</h2>
+          <p className="mt-1 text-sm text-slate-400">For developers and reviewers: the template file, sources, full contents and the automated checks.</p>
+        </div>
+        {mode === "simple" && (
+          <button
+            type="button"
+            onClick={() => {
+              hiding.current = true;
+              setOpen(false);
+            }}
+            aria-expanded={true}
+            aria-controls="technical"
+            className={toggleButton}
+          >
+            Hide
+            <ChevronUp size={15} />
+          </button>
+        )}
       </div>
 
       {!detail.removed && (
